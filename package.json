@@ -1,0 +1,27 @@
+{
+  "name": "hardhat-project",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "deploy:logic": "npx hardhat run scripts/deployLogic.js --network",
+    "verify:logic": "npx hardhat verify --contract contracts/SmartWallet.sol:SmartWallet --network",
+    "deploy:factory": "npx hardhat run scripts/deployFactory.js --network",
+    "verify:factory": "npx hardhat verify --contract contracts/SmartWalletFactory.sol:SmartWalletFactory --network",
+    "predict:wallet": "npx hardhat run scripts/predictWallet.js --network",
+    "create:wallet": "npx hardhat run scripts/createWallet.js --network",
+    "verify:wallet": "npx hardhat verify --contract contracts/SmartWalletProxy.sol:SmartWalletProxy --constructor-args scripts/args.js --network"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/hdkey": "^2.0.3",
+    "bip39": "^3.1.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.5",
+    "hdkey": "^2.1.0"
+  },
+  "dependencies": {
+    "@account-abstraction/contracts": "^0.8.0",
+    "@chainlink/contracts": "^1.1.1",
+    "ethers": "^6.13.3"
+  }
+}
