@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity 0.8.28;
 
 import "@account-abstraction/contracts/interfaces/IAccount.sol";
 import "@account-abstraction/contracts/core/UserOperationLib.sol";
@@ -16,6 +16,9 @@ contract SmartWallet is
 {
     using ECDSA for bytes32;
 
+    event UserOperationValidated(address indexed sender, uint256 nonce);
+    event FundsTransferred(address indexed to, uint256 amount);
+
     address public trustedEntryPoint;
     uint256 public nonce;
 
@@ -23,8 +26,11 @@ contract SmartWallet is
         address _entryPoint,
         address _owner
     ) public initializer {
+        require(_entryPoint != address(0), "Invalid entry point");
+        require(_owner != address(0), "Invalid owner");
         trustedEntryPoint = _entryPoint;
         __Ownable_init();
+        __UUPSUpgradeable_init();
         _transferOwnership(_owner);
     }
 
@@ -33,6 +39,7 @@ contract SmartWallet is
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external override returns (uint256) {
+        require(msg.sender == trustedEntryPoint, "Invalid point");
         require(
             userOpHash.toEthSignedMessageHash().recover(userOp.signature) ==
                 owner(),
@@ -40,12 +47,14 @@ contract SmartWallet is
         );
         if (userOp.nonce != nonce) revert("Invalid nonce");
         nonce++;
+        emit UserOperationValidated(msg.sender, nonce);
 
         if (missingAccountFunds > 0) {
             (bool sent, ) = payable(msg.sender).call{
                 value: missingAccountFunds
             }("");
             require(sent, "Funding failed");
+            emit FundsTransferred(msg.sender, missingAccountFunds);
         }
 
         return 0;

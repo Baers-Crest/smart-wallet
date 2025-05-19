@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity 0.8.28;
 
 import "./SmartWalletProxy.sol";
 
@@ -22,7 +22,9 @@ contract SmartWalletFactory {
             entryPoint,
             owner
         );
-        bytes32 finalSalt = keccak256(abi.encodePacked(owner, salt));
+        bytes32 finalSalt = keccak256(
+            abi.encodePacked(owner, salt, msg.sender)
+        );
         wallet = address(
             new SmartWalletProxy{salt: finalSalt}(implementation, initData)
         );
@@ -47,7 +49,7 @@ contract SmartWalletFactory {
             abi.encodePacked(
                 bytes1(0xff),
                 address(this),
-                keccak256(abi.encodePacked(owner, salt)),
+                keccak256(abi.encodePacked(owner, salt, msg.sender)),
                 keccak256(creationCode)
             )
         );
