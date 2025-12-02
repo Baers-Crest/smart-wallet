@@ -72,7 +72,6 @@ const config: HardhatUserConfig = {
 	mocha: {
 		timeout: 20000000
 	},
-
 	etherscan: {
 		apiKey: {
 			sepolia: process.env.ETHERSCAN_API_KEY || "",
