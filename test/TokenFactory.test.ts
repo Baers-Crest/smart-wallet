@@ -147,7 +147,11 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(amount);
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)).to.changeTokenBalances(token, [owner, user2], [-amount, amount]);
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)).to.changeTokenBalances(
+				token,
+				[owner, user2],
+				[-amount, amount]
+			);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
@@ -219,8 +223,11 @@ describe("TokenFactory & CurrencyToken", function () {
 			const recipients = [user1.address, user2.address];
 			const references = ["Payment #1", "Payment #2"];
 
-			await expect(token.connect(owner).batchTransfer(recipients, amounts, references))
-				.to.changeTokenBalances(token, [owner, user1, user2], [-300n * 10n ** 18n, 100n * 10n ** 18n, 200n * 10n ** 18n]);
+			await expect(token.connect(owner).batchTransfer(recipients, amounts, references)).to.changeTokenBalances(
+				token,
+				[owner, user1, user2],
+				[-300n * 10n ** 18n, 100n * 10n ** 18n, 200n * 10n ** 18n]
+			);
 
 			expect(await token.balanceOf(user1.address)).to.equal(100n * 10n ** 18n);
 			expect(await token.balanceOf(user2.address)).to.equal(200n * 10n ** 18n);
@@ -273,8 +280,11 @@ describe("TokenFactory & CurrencyToken", function () {
 			const to = [user2.address, user2.address];
 			const references = ["Batch transferFrom #1", "Batch transferFrom #2"];
 
-			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
-				.to.changeTokenBalances(token, [owner, user2], [-totalAmount, totalAmount]);
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.changeTokenBalances(
+				token,
+				[owner, user2],
+				[-totalAmount, totalAmount]
+			);
 		});
 
 		it("emits TransferSuccess events for each batchTransferFrom", async function () {
@@ -367,7 +377,11 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(value);
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, value)).to.changeTokenBalances(token, [owner, user1], [-value, value]);
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, value)).to.changeTokenBalances(
+				token,
+				[owner, user1],
+				[-value, value]
+			);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
@@ -458,8 +472,11 @@ describe("TokenFactory & CurrencyToken", function () {
 			const to = [user2.address, user2.address];
 			const references = ["Permit batch #1", "Permit batch #2"];
 
-			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
-				.to.changeTokenBalances(token, [owner, user2], [-totalValue, totalValue]);
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.changeTokenBalances(
+				token,
+				[owner, user2],
+				[-totalValue, totalValue]
+			);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
@@ -608,8 +625,11 @@ describe("TokenFactory & CurrencyToken", function () {
 			const to = [user1.address, user2.address]; // Different recipients
 			const references = ["Permit to user1", "Permit to user2"];
 
-			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
-				.to.changeTokenBalances(token, [owner, user1, user2], [-totalValue, amounts[0], amounts[1]]);
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.changeTokenBalances(
+				token,
+				[owner, user1, user2],
+				[-totalValue, amounts[0], amounts[1]]
+			);
 		});
 	});
 });
