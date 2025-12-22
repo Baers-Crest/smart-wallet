@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract SmartWalletV1 is Ownable2Step, ReentrancyGuard {
@@ -40,7 +40,7 @@ contract SmartWalletV1 is Ownable2Step, ReentrancyGuard {
         _;
     }
 
-    constructor() Ownable() {}
+    constructor() Ownable(msg.sender) {}
 
     function submitTransaction(
         address destination,

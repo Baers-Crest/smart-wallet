@@ -29,7 +29,7 @@ contract SmartWallet is
         require(_entryPoint != address(0), "Invalid entry point");
         require(_owner != address(0), "Invalid owner");
         trustedEntryPoint = _entryPoint;
-        __Ownable_init();
+        __Ownable_init(_owner);
         __UUPSUpgradeable_init();
         _transferOwnership(_owner);
     }
@@ -41,8 +41,7 @@ contract SmartWallet is
     ) external override returns (uint256) {
         require(msg.sender == trustedEntryPoint, "Invalid point");
         require(
-            userOpHash.toEthSignedMessageHash().recover(userOp.signature) ==
-                owner(),
+            userOpHash.recover(userOp.signature) == owner(),
             "Invalid signature"
         );
         if (userOp.nonce != nonce) revert("Invalid nonce");
