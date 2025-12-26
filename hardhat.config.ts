@@ -29,6 +29,14 @@ const config: HardhatUserConfig = {
 			url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
 			accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
 		},
+		amoy: {
+			url: `https://polygon-amoy.infura.io/v3/${process.env.INFURA_API_KEY}`,
+			accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+		},
+		polygon: {
+			url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+			accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+		},
 		hardhat: {
 			forking: {
 				url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
@@ -68,7 +76,9 @@ const config: HardhatUserConfig = {
 	etherscan: {
 		apiKey: {
 			sepolia: process.env.ETHERSCAN_API_KEY || "",
-			mainnet: process.env.ETHERSCAN_API_KEY || ""
+			mainnet: process.env.ETHERSCAN_API_KEY || "",
+			amoy: process.env.ETHERSCAN_API_KEY || "",
+			polygon: process.env.ETHERSCAN_API_KEY || ""
 		},
 		customChains: [
 			{
@@ -85,6 +95,22 @@ const config: HardhatUserConfig = {
 				urls: {
 					apiURL: "https://api.etherscan.io/v2/api?chainid=1",
 					browserURL: "https://etherscan.io/"
+				}
+			},
+			{
+				network: "amoy",
+				chainId: 80002,
+				urls: {
+					apiURL: "https://api.etherscan.io/v2/api?chainid=80002",
+					browserURL: "https://amoy.polygonscan.com/"
+				}
+			},
+			{
+				network: "polygon",
+				chainId: 137,
+				urls: {
+					apiURL: "https://api.etherscan.io/v2/api?chainid=137",
+					browserURL: "https://polygonscan.com/"
 				}
 			}
 		]

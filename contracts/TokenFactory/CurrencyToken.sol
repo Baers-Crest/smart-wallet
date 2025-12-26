@@ -8,9 +8,9 @@ contract CurrencyToken is ERC20Permit, Ownable {
     /// ********************************** Events ****************************************
 
     event TransferSuccess(
-        address from,
-        address to,
-        uint256 value,
+        address indexed from,
+        address indexed to,
+        uint256 indexed value,
         string _reference
     );
 
@@ -42,14 +42,14 @@ contract CurrencyToken is ERC20Permit, Ownable {
     /// ********************************** Functions ****************************************
 
     function transfer(
-        address from,
+        address to,
         uint256 amount,
         string memory _reference
     ) public virtual {
-        if (transfer(from, amount)) {
-            emit TransferSuccess(from, _msgSender(), amount, _reference);
+        if (transfer(to, amount)) {
+            emit TransferSuccess(_msgSender(), to, amount, _reference);
         } else {
-            revert TransferFailed(from, _msgSender(), amount, _reference);
+            revert TransferFailed(_msgSender(), to, amount, _reference);
         }
     }
 
