@@ -133,9 +133,9 @@ describe("TokenFactory & CurrencyToken", function () {
 			const amount = 42n * 10n ** 18n;
 			const reference = "Payment for invoice #123";
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](owner.address, amount, reference))
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, reference))
 				.to.emit(token, "TransferSuccess")
-				.withArgs(owner.address, owner.address, amount, reference);
+				.withArgs(owner.address, user1.address, amount, reference);
 		});
 
 		it("supports approve and transferFrom flow", async function () {
@@ -147,9 +147,22 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(amount);
 
-			await expect(token.connect(user1).transferFrom(owner.address, user2.address, amount)).to.changeTokenBalances(token, [owner, user2], [-amount, amount]);
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)).to.changeTokenBalances(token, [owner, user2], [-amount, amount]);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
+		});
+
+		it("emits TransferSuccess when transferFrom with reference", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amount = 75n * 10n ** 18n;
+			const reference = "Approved payment #456";
+
+			await token.connect(owner).approve(user1.address, amount);
+
+			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user2.address, amount, reference))
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amount, reference);
 		});
 
 		it("reverts transfer when sender has insufficient balance", async function () {
@@ -165,7 +178,7 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			const amount = 1n * 10n ** 18n;
 
-			await expect(token.connect(user1).transferFrom(owner.address, user1.address, amount)).to.be.reverted;
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, amount)).to.be.reverted;
 		});
 
 		it("owner can mint and burn", async function () {
@@ -195,6 +208,119 @@ describe("TokenFactory & CurrencyToken", function () {
 			await expect(token.connect(user1).mint(owner.address, amount)).to.be.reverted;
 
 			await expect(token.connect(user1).burn(owner.address, amount)).to.be.reverted;
+		});
+	});
+
+	describe("Batch transfer operations", function () {
+		it("supports batchTransfer with multiple recipients", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			const recipients = [user1.address, user2.address];
+			const references = ["Payment #1", "Payment #2"];
+
+			await expect(token.connect(owner).batchTransfer(recipients, amounts, references))
+				.to.changeTokenBalances(token, [owner, user1, user2], [-300n * 10n ** 18n, 100n * 10n ** 18n, 200n * 10n ** 18n]);
+
+			expect(await token.balanceOf(user1.address)).to.equal(100n * 10n ** 18n);
+			expect(await token.balanceOf(user2.address)).to.equal(200n * 10n ** 18n);
+		});
+
+		it("emits TransferSuccess events for each batchTransfer", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amounts = [50n * 10n ** 18n, 75n * 10n ** 18n];
+			const recipients = [user1.address, user2.address];
+			const references = ["Batch payment #1", "Batch payment #2"];
+
+			await expect(token.connect(owner).batchTransfer(recipients, amounts, references))
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user1.address, amounts[0], references[0])
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amounts[1], references[1]);
+		});
+
+		it("reverts batchTransfer when array lengths mismatch", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const recipients = [user1.address, user2.address];
+			const amounts = [100n * 10n ** 18n];
+			const references = ["Payment #1"];
+
+			await expect(token.connect(owner).batchTransfer(recipients, amounts, references)).to.be.revertedWith("Length mismatch");
+		});
+
+		it("reverts batchTransfer when sender has insufficient balance", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const totalBalance = await token.balanceOf(owner.address);
+			const amounts = [totalBalance / 2n + 1n, totalBalance / 2n + 1n];
+			const recipients = [user1.address, user2.address];
+			const references = ["Payment #1", "Payment #2"];
+
+			await expect(token.connect(owner).batchTransfer(recipients, amounts, references)).to.be.reverted;
+		});
+
+		it("supports batchTransferFrom with multiple transfers", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			const totalAmount = amounts[0] + amounts[1];
+
+			await token.connect(owner).approve(user1.address, totalAmount);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Batch transferFrom #1", "Batch transferFrom #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
+				.to.changeTokenBalances(token, [owner, user2], [-totalAmount, totalAmount]);
+		});
+
+		it("emits TransferSuccess events for each batchTransferFrom", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amounts = [50n * 10n ** 18n, 75n * 10n ** 18n];
+			const totalAmount = amounts[0] + amounts[1];
+
+			await token.connect(owner).approve(user1.address, totalAmount);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Batch TF #1", "Batch TF #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amounts[0], references[0])
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amounts[1], references[1]);
+		});
+
+		it("reverts batchTransferFrom when array lengths mismatch", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amount = 100n * 10n ** 18n;
+			await token.connect(owner).approve(user1.address, amount);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address];
+			const amounts = [amount];
+			const references = ["Payment #1"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.be.revertedWith("Length mismatch");
+		});
+
+		it("reverts batchTransferFrom when allowance is insufficient", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			await token.connect(owner).approve(user1.address, 150n * 10n ** 18n); // Less than total needed
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Payment #1", "Payment #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.be.reverted;
 		});
 	});
 
@@ -241,7 +367,7 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(value);
 
-			await expect(token.connect(user1).transferFrom(owner.address, user1.address, value)).to.changeTokenBalances(token, [owner, user1], [-value, value]);
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, value)).to.changeTokenBalances(token, [owner, user1], [-value, value]);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
@@ -284,6 +410,206 @@ describe("TokenFactory & CurrencyToken", function () {
 			const { v, r, s } = ethers.Signature.from(signature);
 
 			await expect(token.connect(user1).permit(owner.address, user1.address, value, deadline, v, r, s)).to.be.reverted;
+		});
+
+		it("uses permit to approve and then batchTransferFrom", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const chainId = (await ethers.provider.getNetwork()).chainId;
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			const totalValue = amounts[0] + amounts[1];
+			const nonce = await token.nonces(owner.address);
+			const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+			const domain = {
+				name: await token.name(),
+				version: "1",
+				chainId,
+				verifyingContract: await token.getAddress()
+			};
+
+			const types = {
+				Permit: [
+					{ name: "owner", type: "address" },
+					{ name: "spender", type: "address" },
+					{ name: "value", type: "uint256" },
+					{ name: "nonce", type: "uint256" },
+					{ name: "deadline", type: "uint256" }
+				]
+			};
+
+			const message = {
+				owner: owner.address,
+				spender: user1.address,
+				value: totalValue,
+				nonce,
+				deadline
+			};
+
+			const signature = await owner.signTypedData(domain, types, message);
+			const { v, r, s } = ethers.Signature.from(signature);
+
+			await token.connect(user1).permit(owner.address, user1.address, totalValue, deadline, v, r, s);
+
+			expect(await token.allowance(owner.address, user1.address)).to.equal(totalValue);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Permit batch #1", "Permit batch #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
+				.to.changeTokenBalances(token, [owner, user2], [-totalValue, totalValue]);
+
+			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
+		});
+
+		it("emits TransferSuccess events when using permit with batchTransferFrom", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const chainId = (await ethers.provider.getNetwork()).chainId;
+
+			const amounts = [50n * 10n ** 18n, 75n * 10n ** 18n];
+			const totalValue = amounts[0] + amounts[1];
+			const nonce = await token.nonces(owner.address);
+			const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+			const domain = {
+				name: await token.name(),
+				version: "1",
+				chainId,
+				verifyingContract: await token.getAddress()
+			};
+
+			const types = {
+				Permit: [
+					{ name: "owner", type: "address" },
+					{ name: "spender", type: "address" },
+					{ name: "value", type: "uint256" },
+					{ name: "nonce", type: "uint256" },
+					{ name: "deadline", type: "uint256" }
+				]
+			};
+
+			const message = {
+				owner: owner.address,
+				spender: user1.address,
+				value: totalValue,
+				nonce,
+				deadline
+			};
+
+			const signature = await owner.signTypedData(domain, types, message);
+			const { v, r, s } = ethers.Signature.from(signature);
+
+			await token.connect(user1).permit(owner.address, user1.address, totalValue, deadline, v, r, s);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Permit batch event #1", "Permit batch event #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amounts[0], references[0])
+				.to.emit(token, "TransferSuccess")
+				.withArgs(owner.address, user2.address, amounts[1], references[1]);
+		});
+
+		it("reverts batchTransferFrom after permit when total amount exceeds approved allowance", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const chainId = (await ethers.provider.getNetwork()).chainId;
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			const approvedValue = 250n * 10n ** 18n; // Less than total needed (300)
+			const nonce = await token.nonces(owner.address);
+			const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+			const domain = {
+				name: await token.name(),
+				version: "1",
+				chainId,
+				verifyingContract: await token.getAddress()
+			};
+
+			const types = {
+				Permit: [
+					{ name: "owner", type: "address" },
+					{ name: "spender", type: "address" },
+					{ name: "value", type: "uint256" },
+					{ name: "nonce", type: "uint256" },
+					{ name: "deadline", type: "uint256" }
+				]
+			};
+
+			const message = {
+				owner: owner.address,
+				spender: user1.address,
+				value: approvedValue,
+				nonce,
+				deadline
+			};
+
+			const signature = await owner.signTypedData(domain, types, message);
+			const { v, r, s } = ethers.Signature.from(signature);
+
+			await token.connect(user1).permit(owner.address, user1.address, approvedValue, deadline, v, r, s);
+
+			expect(await token.allowance(owner.address, user1.address)).to.equal(approvedValue);
+
+			const from = [owner.address, owner.address];
+			const to = [user2.address, user2.address];
+			const references = ["Batch #1", "Batch #2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references)).to.be.reverted;
+		});
+
+		it("supports permit with batchTransferFrom to multiple different recipients", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const chainId = (await ethers.provider.getNetwork()).chainId;
+
+			const amounts = [100n * 10n ** 18n, 200n * 10n ** 18n];
+			const totalValue = amounts[0] + amounts[1];
+			const nonce = await token.nonces(owner.address);
+			const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+			const domain = {
+				name: await token.name(),
+				version: "1",
+				chainId,
+				verifyingContract: await token.getAddress()
+			};
+
+			const types = {
+				Permit: [
+					{ name: "owner", type: "address" },
+					{ name: "spender", type: "address" },
+					{ name: "value", type: "uint256" },
+					{ name: "nonce", type: "uint256" },
+					{ name: "deadline", type: "uint256" }
+				]
+			};
+
+			const message = {
+				owner: owner.address,
+				spender: user1.address,
+				value: totalValue,
+				nonce,
+				deadline
+			};
+
+			const signature = await owner.signTypedData(domain, types, message);
+			const { v, r, s } = ethers.Signature.from(signature);
+
+			await token.connect(user1).permit(owner.address, user1.address, totalValue, deadline, v, r, s);
+
+			const from = [owner.address, owner.address];
+			const to = [user1.address, user2.address]; // Different recipients
+			const references = ["Permit to user1", "Permit to user2"];
+
+			await expect(token.connect(user1).batchTransferFrom(from, to, amounts, references))
+				.to.changeTokenBalances(token, [owner, user1, user2], [-totalValue, amounts[0], amounts[1]]);
 		});
 	});
 });
