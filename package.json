@@ -6,6 +6,7 @@
     "deploy:logic": "npx hardhat run scripts/deployLogic.js --network",
     "verify:logic": "npx hardhat verify --contract contracts/SmartWallet.sol:SmartWallet --network",
     "deploy:factory": "npx hardhat run scripts/deployFactory.js --network",
+    "deploy:smartWalletFactoryV1": "npx hardhat run scripts/deploy.ts --network",
     "deploy:tokenFactory": "npx hardhat run scripts/deployTokenFactory.ts --network",
     "verify:factory": "npx hardhat verify --contract contracts/SmartWalletFactory.sol:SmartWalletFactory --network",
     "verify:tokenFactory": "npx hardhat verify --contract contracts/TokenFactory/TokenFactory.sol:TokenFactory --network",
