@@ -38,6 +38,9 @@ const config: HardhatUserConfig = {
 			accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
 		},
 		hardhat: {
+			// Coverage instrumentation inflates bytecode past EIP-170; only relax
+			// the limit for the coverage run, never for normal test runs.
+			allowUnlimitedContractSize: process.env.COVERAGE === "true",
 			forking: {
 				url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
 				enabled: process.env.FORK_SEPOLIA === "true"
