@@ -31,16 +31,7 @@ import {
 ///      - the factory implementation disables its own initializers in the
 ///        constructor, so the raw implementation cannot be initialized by anyone;
 ///      - deployment is pausable via `PAUSER_ROLE`;
-///      - inputs are validated (no zero owner, no empty name/symbol);
-///      - the unreachable `token == address(0)` check after `new` is gone — proxy
-///        construction reverts on failure, it never yields the zero address;
-///      - `TokenDeployed` indexes the token and owner addresses.
-///
-///      Storage layout appends to `TokenFactoryLegacy`'s (`tokens` stays at slot 0;
-///      AccessControl and Pausable both use ERC-7201 namespaced storage), so this
-///      remains a valid upgrade target for the existing transparent proxy. Such an
-///      upgrade would need a reinitializer to populate `tokenImplementation`, which
-///      `initialize` cannot set on an already-initialized proxy.
+///      - `TokenDeployed` indexes the token and owner addresses
 contract TokenFactory is
     Initializable,
     AccessControlUpgradeable,

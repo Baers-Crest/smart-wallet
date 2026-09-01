@@ -22,7 +22,7 @@ import {
 
 /// @title CurrencyToken
 /// @notice Closed-loop gateway token deployed by {TokenFactory} behind a UUPS proxy.
-/// @dev Hardened, upgradeable successor to `CurrencyTokenLegacy`. Differences:
+/// @dev
 ///      - each token is its own ERC-1967 proxy; upgrades are authorised per token
 ///        by that token's owner via {_authorizeUpgrade}. Tokens do not share an
 ///        upgrade authority, so one token's migration cannot touch another's;
@@ -31,20 +31,9 @@ import {
 ///      - all balance movements (including `mint`/`burn`) are pausable by the owner;
 ///      - `TransferSuccess` indexes `keccak256(bytes(paymentReference))` instead of
 ///        `value`, making off-chain reconciliation a direct log lookup;
-///      - zero-amount and empty-reference referenced transfers are rejected, so the
-///        reconciliation logs cannot be spammed for free;
-///      - the unreachable `TransferFailed` branches are gone: OpenZeppelin v5's
-///        `transfer`/`transferFrom` revert on failure, they never return `false`.
-///
 ///      Storage: this contract's own state lives in an ERC-7201 namespace, so
 ///      future versions may add parent contracts without colliding with it.
-///
-///      Trust assumption: the owner may `mint` arbitrarily, `burn` from ANY address
-///      without allowance, and upgrade the implementation behind every holder's
-///      balance. This is intentional for a closed-loop gateway token — the platform
-///      must be able to confiscate and reverse — but it means owner-key compromise
-///      is total compromise. The owner key is expected to be a monitored,
-///      KMS-held admin address.
+
 contract CurrencyToken is
     Initializable,
     ERC20Upgradeable,
@@ -157,7 +146,7 @@ contract CurrencyToken is
         address to,
         uint256 amount,
         string calldata paymentReference
-    ) external virtual whenNotPaused {
+    ) external virtual {
         address sender = _msgSender();
 
         _validateReferenced(amount, paymentReference, sender, to);
@@ -180,7 +169,7 @@ contract CurrencyToken is
         address[] calldata to,
         uint256[] calldata amounts,
         string[] calldata references
-    ) external virtual whenNotPaused {
+    ) external virtual {
         uint256 len = to.length;
 
         if (len == 0) {
@@ -221,7 +210,7 @@ contract CurrencyToken is
         address to,
         uint256 amount,
         string calldata paymentReference
-    ) external virtual whenNotPaused {
+    ) external virtual {
         _validateReferenced(amount, paymentReference, from, to);
 
         super.transferFrom(from, to, amount);
@@ -243,7 +232,7 @@ contract CurrencyToken is
         address[] calldata to,
         uint256[] calldata amounts,
         string[] calldata references
-    ) external virtual whenNotPaused {
+    ) external virtual {
         uint256 len = to.length;
 
         if (len == 0) {
