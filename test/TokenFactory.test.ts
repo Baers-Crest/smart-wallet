@@ -5,7 +5,7 @@ import type { CurrencyTokenV2Mock } from "../typechain-types/contracts/mocks/Cur
 
 const refHash = (reference: string) => ethers.keccak256(ethers.toUtf8Bytes(reference));
 
-describe("TokenFactory & CurrencyToken (hardened)", function () {
+describe("TokenFactory & CurrencyToken", function () {
 	async function deployImplementation() {
 		const CurrencyTokenImpl = await ethers.getContractFactory("CurrencyToken");
 		const impl = await CurrencyTokenImpl.deploy();
@@ -73,7 +73,7 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 		return ethers.Signature.from(signature);
 	}
 
-	describe("TokenFactory deployment & hardening", function () {
+	describe("TokenFactory deployment", function () {
 		it("deploys and initializes correctly", async function () {
 			const { factory, admin, deployer } = await deployFactory();
 
@@ -114,9 +114,10 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 				upgrades.deployProxy(Factory, [admin.address, admin.address, ethers.ZeroAddress], { initializer: "initialize" })
 			).to.be.revertedWithCustomError(Factory, "ZeroAddress");
 
-			await expect(
-				upgrades.deployProxy(Factory, [admin.address, admin.address, admin.address], { initializer: "initialize" })
-			).to.be.revertedWithCustomError(Factory, "NotAContract");
+			await expect(upgrades.deployProxy(Factory, [admin.address, admin.address, admin.address], { initializer: "initialize" })).to.be.revertedWithCustomError(
+				Factory,
+				"NotAContract"
+			);
 		});
 
 		it("only deployer role can deploy tokens", async function () {
@@ -141,10 +142,7 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 		it("rejects a zero owner and empty name/symbol", async function () {
 			const { factory, deployer, owner } = await deployFactory();
 
-			await expect(factory.connect(deployer).deployToken("Token", "TKN", ethers.ZeroAddress, 18, 0n)).to.be.revertedWithCustomError(
-				factory,
-				"ZeroAddress"
-			);
+			await expect(factory.connect(deployer).deployToken("Token", "TKN", ethers.ZeroAddress, 18, 0n)).to.be.revertedWithCustomError(factory, "ZeroAddress");
 
 			await expect(factory.connect(deployer).deployToken("", "TKN", owner.address, 18, 0n)).to.be.revertedWithCustomError(factory, "EmptyString");
 
@@ -230,19 +228,15 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			expect(await token.totalSupply()).to.equal(0n);
 		});
 
-		it("supports plain transfer and transferFrom", async function () {
+		it("supports referenced transfer and transferFrom", async function () {
 			const { token, owner, user1, user2 } = await deployTokenFromFactory();
 
 			const amount = 100n * 10n ** 18n;
 
-			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.changeTokenBalances(
-				token,
-				[owner, user1],
-				[-amount, amount]
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "plain-ref-1")).to.changeTokenBalances(token, [owner, user1], [-amount, amount]);
 
 			await token.connect(owner).approve(user1.address, amount);
-			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)).to.changeTokenBalances(
+			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user2.address, amount, "plain-ref-2")).to.changeTokenBalances(
 				token,
 				[owner, user2],
 				[-amount, amount]
@@ -251,17 +245,58 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
 
+		it("disables the unreferenced ERC-20 entrypoints", async function () {
+			const { token, owner, user1, user2 } = await deployTokenFromFactory();
+
+			const amount = 100n * 10n ** 18n;
+
+			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.be.revertedWithCustomError(
+				token,
+				"ReferenceRequired"
+			);
+
+			await token.connect(owner).approve(user1.address, amount);
+
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)
+			).to.be.revertedWithCustomError(token, "ReferenceRequired");
+
+			// Nothing moved, and the allowance is untouched.
+			expect(await token.balanceOf(user1.address)).to.equal(0n);
+			expect(await token.balanceOf(user2.address)).to.equal(0n);
+			expect(await token.allowance(owner.address, user1.address)).to.equal(amount);
+		});
+
+		it("rejects the unreferenced entrypoints ahead of every other check", async function () {
+			const { token, owner, user1 } = await deployTokenFromFactory();
+
+			// Zero amount, no balance, no allowance, even paused: the reference
+			// requirement is what surfaces, so callers get one unambiguous reason.
+			await expect(token.connect(user1)["transfer(address,uint256)"](owner.address, 0n)).to.be.revertedWithCustomError(
+				token,
+				"ReferenceRequired"
+			);
+
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, 10n ** 30n)
+			).to.be.revertedWithCustomError(token, "ReferenceRequired");
+
+			await token.connect(owner).pause();
+
+			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, 1n)).to.be.revertedWithCustomError(
+				token,
+				"ReferenceRequired"
+			);
+		});
+
 		it("reverts transfer with insufficient balance and transferFrom with insufficient allowance", async function () {
 			const { token, owner, user1 } = await deployTokenFromFactory();
 
 			const amount = 1n * 10n ** 18n;
 
-			await expect(token.connect(user1)["transfer(address,uint256)"](owner.address, amount)).to.be.revertedWithCustomError(
-				token,
-				"ERC20InsufficientBalance"
-			);
+			await expect(token.connect(user1)["transfer(address,uint256,string)"](owner.address, amount, "no-balance")).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, amount)).to.be.revertedWithCustomError(
+			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "no-allowance")).to.be.revertedWithCustomError(
 				token,
 				"ERC20InsufficientAllowance"
 			);
@@ -314,15 +349,9 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			const amount = 1n * 10n ** 18n;
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, 0n, "spam")).to.be.revertedWithCustomError(
-				token,
-				"ZeroAmount"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, 0n, "spam")).to.be.revertedWithCustomError(token, "ZeroAmount");
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "")).to.be.revertedWithCustomError(
-				token,
-				"EmptyReference"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "")).to.be.revertedWithCustomError(token, "EmptyReference");
 
 			await token.connect(owner).approve(user1.address, amount);
 
@@ -349,9 +378,10 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			expect(await token.paymentReferenceUsed(reference, owner.address, user1.address, amount)).to.be.true;
 
-			await expect(
-				token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, reference)
-			).to.be.revertedWithCustomError(token, "ReferenceAlreadyUsed");
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, reference)).to.be.revertedWithCustomError(
+				token,
+				"ReferenceAlreadyUsed"
+			);
 
 			// The blocked replay moved nothing.
 			expect(await token.balanceOf(user1.address)).to.equal(amount);
@@ -473,19 +503,20 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			await token.connect(user1).batchTransferFrom([owner.address], [user2.address], [amount], [reference]);
 
-			await expect(
-				token.connect(user1).batchTransferFrom([owner.address], [user2.address], [amount], [reference])
-			).to.be.revertedWithCustomError(token, "ReferenceAlreadyUsed");
+			await expect(token.connect(user1).batchTransferFrom([owner.address], [user2.address], [amount], [reference])).to.be.revertedWithCustomError(
+				token,
+				"ReferenceAlreadyUsed"
+			);
 		});
 
-		it("leaves unreferenced transfers unaffected", async function () {
+		it("records nothing when a disabled entrypoint is called", async function () {
 			const { token, owner, user1 } = await deployTokenFromFactory();
 
 			const amount = 9n * 10n ** 18n;
 			const reference = "INV-9009";
 
 			// A plain ERC20 transfer records no reference...
-			await token.connect(owner)["transfer(address,uint256)"](user1.address, amount);
+			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.be.revertedWithCustomError(token, "ReferenceRequired");
 			expect(await token.paymentReferenceUsed(reference, owner.address, user1.address, amount)).to.be.false;
 
 			// ...so the same movement can still be made with a reference afterwards.
@@ -515,15 +546,9 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			await token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "INV-A");
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, 0n, "INV-A")).to.be.revertedWithCustomError(
-				token,
-				"ZeroAmount"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, 0n, "INV-A")).to.be.revertedWithCustomError(token, "ZeroAmount");
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "")).to.be.revertedWithCustomError(
-				token,
-				"EmptyReference"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "")).to.be.revertedWithCustomError(token, "EmptyReference");
 		});
 
 		it("keeps the used-flags across pause/unpause and across an upgrade", async function () {
@@ -549,9 +574,10 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			expect(await upgraded.paymentReferenceUsed(reference, owner.address, user1.address, amount)).to.be.true;
 
-			await expect(
-				upgraded.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, reference)
-			).to.be.revertedWithCustomError(upgraded, "ReferenceAlreadyUsed");
+			await expect(upgraded.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, reference)).to.be.revertedWithCustomError(
+				upgraded,
+				"ReferenceAlreadyUsed"
+			);
 		});
 	});
 
@@ -606,15 +632,9 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			await expect(token.connect(owner).batchTransfer([], [], [])).to.be.revertedWithCustomError(token, "EmptyBatch");
 
 			// batchTransferFrom: same, across all three companion arrays.
-			await expect(token.connect(owner).batchTransferFrom([owner.address], to, amounts, refs)).to.be.revertedWithCustomError(
-				token,
-				"LengthMismatch"
-			);
+			await expect(token.connect(owner).batchTransferFrom([owner.address], to, amounts, refs)).to.be.revertedWithCustomError(token, "LengthMismatch");
 			await expect(token.connect(owner).batchTransferFrom(from, to, [1n], refs)).to.be.revertedWithCustomError(token, "LengthMismatch");
-			await expect(token.connect(owner).batchTransferFrom(from, to, amounts, ["Payment #1"])).to.be.revertedWithCustomError(
-				token,
-				"LengthMismatch"
-			);
+			await expect(token.connect(owner).batchTransferFrom(from, to, amounts, ["Payment #1"])).to.be.revertedWithCustomError(token, "LengthMismatch");
 
 			await expect(token.connect(owner).batchTransferFrom([], [], [], [])).to.be.revertedWithCustomError(token, "EmptyBatch");
 		});
@@ -624,13 +644,15 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			const amount = 10n * 10n ** 18n;
 
-			await expect(
-				token.connect(owner).batchTransfer([user1.address, user2.address], [amount, 0n], ["ok", "zero"])
-			).to.be.revertedWithCustomError(token, "ZeroAmount");
+			await expect(token.connect(owner).batchTransfer([user1.address, user2.address], [amount, 0n], ["ok", "zero"])).to.be.revertedWithCustomError(
+				token,
+				"ZeroAmount"
+			);
 
-			await expect(
-				token.connect(owner).batchTransfer([user1.address, user2.address], [amount, amount], ["ok", ""])
-			).to.be.revertedWithCustomError(token, "EmptyReference");
+			await expect(token.connect(owner).batchTransfer([user1.address, user2.address], [amount, amount], ["ok", ""])).to.be.revertedWithCustomError(
+				token,
+				"EmptyReference"
+			);
 
 			expect(await token.balanceOf(user1.address)).to.equal(0n);
 		});
@@ -688,7 +710,6 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			await token.connect(owner).pause();
 			expect(await token.paused()).to.be.true;
 
-			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.be.revertedWithCustomError(token, "EnforcedPause");
 			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "ref")).to.be.revertedWithCustomError(
 				token,
 				"EnforcedPause"
@@ -702,20 +723,17 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			await expect(
 				token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "ref")
 			).to.be.revertedWithCustomError(token, "EnforcedPause");
-			await expect(
-				token.connect(user1).batchTransferFrom([owner.address], [user1.address], [amount], ["ref"])
-			).to.be.revertedWithCustomError(token, "EnforcedPause");
+			await expect(token.connect(user1).batchTransferFrom([owner.address], [user1.address], [amount], ["ref"])).to.be.revertedWithCustomError(
+				token,
+				"EnforcedPause"
+			);
 
 			await expect(token.connect(user1).unpause()).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
 
 			await token.connect(owner).unpause();
 			expect(await token.paused()).to.be.false;
 
-			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.changeTokenBalances(
-				token,
-				[owner, user1],
-				[-amount, amount]
-			);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "after-unpause")).to.changeTokenBalances(token, [owner, user1], [-amount, amount]);
 		});
 
 		it("still allows approvals and permits while paused", async function () {
@@ -727,9 +745,10 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			await token.connect(owner).approve(user1.address, amount);
 			expect(await token.allowance(owner.address, user1.address)).to.equal(amount);
 
-			await expect(
-				token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, amount)
-			).to.be.revertedWithCustomError(token, "EnforcedPause");
+			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "while-paused")).to.be.revertedWithCustomError(
+				token,
+				"EnforcedPause"
+			);
 		});
 	});
 
@@ -799,7 +818,7 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 			await token.connect(user1).permit(owner.address, user1.address, value, deadline, v, r, s);
 			expect(await token.allowance(owner.address, user1.address)).to.equal(value);
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, value)).to.changeTokenBalances(
+			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, value, "permit-then-transfer")).to.changeTokenBalances(
 				token,
 				[owner, user1],
 				[-value, value]
@@ -925,10 +944,7 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 		it("rejects a token whose owner is the zero address", async function () {
 			const { factory, deployer } = await deployFactory();
 
-			await expect(factory.connect(deployer).deployToken("Token", "TKN", ethers.ZeroAddress, 18, 0n)).to.be.revertedWithCustomError(
-				factory,
-				"ZeroAddress"
-			);
+			await expect(factory.connect(deployer).deployToken("Token", "TKN", ethers.ZeroAddress, 18, 0n)).to.be.revertedWithCustomError(factory, "ZeroAddress");
 		});
 
 		it("the token initializer rejects a zero owner even when called outside the factory", async function () {
@@ -977,10 +993,7 @@ describe("TokenFactory & CurrencyToken (hardened)", function () {
 
 			const otherImpl = await (await deployImplementation()).getAddress();
 
-			await expect(factory.connect(user1).setTokenImplementation(otherImpl)).to.be.revertedWithCustomError(
-				factory,
-				"AccessControlUnauthorizedAccount"
-			);
+			await expect(factory.connect(user1).setTokenImplementation(otherImpl)).to.be.revertedWithCustomError(factory, "AccessControlUnauthorizedAccount");
 
 			await expect(factory.connect(admin).setTokenImplementation(ethers.ZeroAddress)).to.be.revertedWithCustomError(factory, "ZeroAddress");
 

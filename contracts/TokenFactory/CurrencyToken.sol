@@ -31,6 +31,15 @@ import {
 ///      - all balance movements (including `mint`/`burn`) are pausable by the owner;
 ///      - `TransferSuccess` indexes `keccak256(bytes(paymentReference))` instead of
 ///        `value`, making off-chain reconciliation a direct log lookup;
+///      - the plain ERC-20 `transfer(address,uint256)` and
+///        `transferFrom(address,address,uint256)` entrypoints always revert with
+///        {ReferenceRequired}. Every balance movement between accounts must carry
+///        a payment reference so it lands in the reconciliation log. NOTE: this
+///        is a deliberate deviation from ERC-20 — the token keeps the standard's
+///        ABI but not its behaviour, so venues that call the two-argument
+///        entrypoints (exchanges, custodians, DEXes, most explorers' "send"
+///        buttons) cannot move these tokens. That is intended for a closed-loop
+///        gateway asset; it is not suitable for a freely tradable one;
 ///      Storage: this contract's own state lives in an ERC-7201 namespace, so
 ///      future versions may add parent contracts without colliding with it.
 
@@ -76,6 +85,9 @@ contract CurrencyToken is
     error ZeroAddress();
     /// @notice A referenced transfer was attempted with a reference that has already been used.
     error ReferenceAlreadyUsed();
+    /// @notice The plain ERC-20 entrypoints are disabled; use the overload that
+    ///         takes a payment reference.
+    error ReferenceRequired();
 
     /// ********************************** Storage ****************************************
 
@@ -162,6 +174,27 @@ contract CurrencyToken is
             amount,
             paymentReference
         );
+    }
+
+    /// @notice Disabled. Use {transfer(address,uint256,string)} instead.
+    /// @dev Kept in the ABI for ERC-20 shape, but always reverts: an unreferenced
+    ///      movement would never reach the reconciliation log.
+    function transfer(
+        address,
+        uint256
+    ) public pure virtual override returns (bool) {
+        revert ReferenceRequired();
+    }
+
+    /// @notice Disabled. Use {transferFrom(address,address,uint256,string)} instead.
+    /// @dev Kept in the ABI for ERC-20 shape, but always reverts: an unreferenced
+    ///      movement would never reach the reconciliation log.
+    function transferFrom(
+        address,
+        address,
+        uint256
+    ) public pure virtual override returns (bool) {
+        revert ReferenceRequired();
     }
 
     /// @notice Transfer to many recipients, each with its own payment reference.
