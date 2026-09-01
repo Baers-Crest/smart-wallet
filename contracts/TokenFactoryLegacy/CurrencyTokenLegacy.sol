@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract CurrencyToken is ERC20Permit, Ownable {
+contract CurrencyTokenLegacy is ERC20Permit, Ownable {
     /// ********************************** Events ****************************************
 
     event TransferSuccess(

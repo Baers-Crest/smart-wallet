@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./CurrencyToken.sol";
+import "./CurrencyTokenLegacy.sol";
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {
     AccessControlUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
-contract TokenFactory is Initializable, AccessControlUpgradeable {
+contract TokenFactoryLegacy is Initializable, AccessControlUpgradeable {
     /// ********************************** Constants ****************************************
 
     bytes32 public constant DEPLOYER_ROLE = keccak256("DEPLOYER_ROLE");
@@ -48,7 +48,13 @@ contract TokenFactory is Initializable, AccessControlUpgradeable {
         }
 
         token = address(
-            new CurrencyToken(name, symbol, owner, decimals, initialSupply)
+            new CurrencyTokenLegacy(
+                name,
+                symbol,
+                owner,
+                decimals,
+                initialSupply
+            )
         );
 
         if (token == address(0)) {
