@@ -16,14 +16,6 @@ async function main() {
 	const deployer = await getDeployer();
 	const deployerAddress = await deployer.getAddress();
 
-	const tokenAdmin = process.env.TOKEN_ADMIN_ADDRESS ?? deployerAddress;
-	if (!tokenAdmin) {
-		throw new Error("TOKEN_ADMIN_ADDRESS is not set");
-	}
-	if (!ethers.isAddress(tokenAdmin)) {
-		throw new Error(`TOKEN_ADMIN_ADDRESS is not a valid address: ${tokenAdmin}`);
-	}
-
 	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS ?? deployerAddress;
 	if (!tokenDeployer) {
 		throw new Error("TOKEN_DEPLOYER_ADDRESS is not set");

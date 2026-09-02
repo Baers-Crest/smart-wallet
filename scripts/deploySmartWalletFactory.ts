@@ -1,11 +1,13 @@
 import { ethers } from "hardhat";
+import { getDeployer } from "./signers/getDeployer";
 
 async function main() {
-	const [deployer] = await ethers.getSigners();
+	const deployer = await getDeployer();
+	const deployerAddress = await deployer.getAddress();
 
-	console.log("Deploying with:", deployer.address);
+	console.log("Deploying with:", deployerAddress);
 
-	const balance = await deployer.provider!.getBalance(deployer.address);
+	const balance = await deployer.provider!.getBalance(deployerAddress);
 	console.log("Balance (ETH):", ethers.formatEther(balance));
 
 	const Factory = await ethers.getContractFactory("SmartWalletFactoryV1");
