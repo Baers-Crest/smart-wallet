@@ -11,25 +11,29 @@ import { ethers, upgrades } from "hardhat";
 async function main() {
 	const [admin] = await ethers.getSigners();
 
-	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS;
+	const tokenAdmin = process.env.TOKEN_ADMIN_ADDRESS ?? admin.address;
+	if (!tokenAdmin) {
+		throw new Error("TOKEN_ADMIN_ADDRESS is not set");
+	}
+
+	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS ?? admin.address;
 	if (!tokenDeployer) {
 		throw new Error("TOKEN_DEPLOYER_ADDRESS is not set");
 	}
 
 	const CurrencyToken = await ethers.getContractFactory("CurrencyToken");
-	const currencyTokenImpl = await CurrencyToken.deploy();
-	await currencyTokenImpl.waitForDeployment();
-	const currencyTokenImplAddress = await currencyTokenImpl.getAddress();
+	const currencyTokenImpl = await upgrades.deployImplementation(CurrencyToken, { kind: "uups" });
+	const currencyTokenImplAddress = currencyTokenImpl.toString();
 	console.log("CurrencyToken implementation deployed to:", currencyTokenImplAddress);
 
 	const Factory = await ethers.getContractFactory("TokenFactory");
-	const factory = await upgrades.deployProxy(Factory, [admin.address, tokenDeployer, currencyTokenImplAddress], {
+	const factory = await upgrades.deployProxy(Factory, [tokenAdmin, tokenDeployer, currencyTokenImplAddress], {
 		initializer: "initialize"
 	});
 	await factory.waitForDeployment();
 
 	console.log("TokenFactory deployed to:", await factory.getAddress());
-	console.log("  admin:          ", admin.address);
+	console.log("  admin:          ", tokenAdmin);
 	console.log("  token deployer: ", tokenDeployer);
 	console.log("  token impl:     ", currencyTokenImplAddress);
 }

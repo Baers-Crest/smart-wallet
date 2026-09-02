@@ -233,14 +233,16 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			const amount = 100n * 10n ** 18n;
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "plain-ref-1")).to.changeTokenBalances(token, [owner, user1], [-amount, amount]);
-
-			await token.connect(owner).approve(user1.address, amount);
-			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user2.address, amount, "plain-ref-2")).to.changeTokenBalances(
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "plain-ref-1")).to.changeTokenBalances(
 				token,
-				[owner, user2],
+				[owner, user1],
 				[-amount, amount]
 			);
+
+			await token.connect(owner).approve(user1.address, amount);
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user2.address, amount, "plain-ref-2")
+			).to.changeTokenBalances(token, [owner, user2], [-amount, amount]);
 
 			expect(await token.allowance(owner.address, user1.address)).to.equal(0n);
 		});
@@ -250,16 +252,14 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			const amount = 100n * 10n ** 18n;
 
-			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.be.revertedWithCustomError(
-				token,
-				"ReferenceRequired"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, amount)).to.be.revertedWithCustomError(token, "ReferenceRequired");
 
 			await token.connect(owner).approve(user1.address, amount);
 
-			await expect(
-				token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)
-			).to.be.revertedWithCustomError(token, "ReferenceRequired");
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user2.address, amount)).to.be.revertedWithCustomError(
+				token,
+				"ReferenceRequired"
+			);
 
 			// Nothing moved, and the allowance is untouched.
 			expect(await token.balanceOf(user1.address)).to.equal(0n);
@@ -272,21 +272,16 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			// Zero amount, no balance, no allowance, even paused: the reference
 			// requirement is what surfaces, so callers get one unambiguous reason.
-			await expect(token.connect(user1)["transfer(address,uint256)"](owner.address, 0n)).to.be.revertedWithCustomError(
+			await expect(token.connect(user1)["transfer(address,uint256)"](owner.address, 0n)).to.be.revertedWithCustomError(token, "ReferenceRequired");
+
+			await expect(token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, 10n ** 30n)).to.be.revertedWithCustomError(
 				token,
 				"ReferenceRequired"
 			);
-
-			await expect(
-				token.connect(user1)["transferFrom(address,address,uint256)"](owner.address, user1.address, 10n ** 30n)
-			).to.be.revertedWithCustomError(token, "ReferenceRequired");
 
 			await token.connect(owner).pause();
 
-			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, 1n)).to.be.revertedWithCustomError(
-				token,
-				"ReferenceRequired"
-			);
+			await expect(token.connect(owner)["transfer(address,uint256)"](user1.address, 1n)).to.be.revertedWithCustomError(token, "ReferenceRequired");
 		});
 
 		it("reverts transfer with insufficient balance and transferFrom with insufficient allowance", async function () {
@@ -294,12 +289,14 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			const amount = 1n * 10n ** 18n;
 
-			await expect(token.connect(user1)["transfer(address,uint256,string)"](owner.address, amount, "no-balance")).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
-
-			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "no-allowance")).to.be.revertedWithCustomError(
+			await expect(token.connect(user1)["transfer(address,uint256,string)"](owner.address, amount, "no-balance")).to.be.revertedWithCustomError(
 				token,
-				"ERC20InsufficientAllowance"
+				"ERC20InsufficientBalance"
 			);
+
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "no-allowance")
+			).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
 		});
 	});
 
@@ -733,7 +730,11 @@ describe("TokenFactory & CurrencyToken", function () {
 			await token.connect(owner).unpause();
 			expect(await token.paused()).to.be.false;
 
-			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "after-unpause")).to.changeTokenBalances(token, [owner, user1], [-amount, amount]);
+			await expect(token.connect(owner)["transfer(address,uint256,string)"](user1.address, amount, "after-unpause")).to.changeTokenBalances(
+				token,
+				[owner, user1],
+				[-amount, amount]
+			);
 		});
 
 		it("still allows approvals and permits while paused", async function () {
@@ -745,10 +746,9 @@ describe("TokenFactory & CurrencyToken", function () {
 			await token.connect(owner).approve(user1.address, amount);
 			expect(await token.allowance(owner.address, user1.address)).to.equal(amount);
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "while-paused")).to.be.revertedWithCustomError(
-				token,
-				"EnforcedPause"
-			);
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, amount, "while-paused")
+			).to.be.revertedWithCustomError(token, "EnforcedPause");
 		});
 	});
 
@@ -818,11 +818,9 @@ describe("TokenFactory & CurrencyToken", function () {
 			await token.connect(user1).permit(owner.address, user1.address, value, deadline, v, r, s);
 			expect(await token.allowance(owner.address, user1.address)).to.equal(value);
 
-			await expect(token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, value, "permit-then-transfer")).to.changeTokenBalances(
-				token,
-				[owner, user1],
-				[-value, value]
-			);
+			await expect(
+				token.connect(user1)["transferFrom(address,address,uint256,string)"](owner.address, user1.address, value, "permit-then-transfer")
+			).to.changeTokenBalances(token, [owner, user1], [-value, value]);
 		});
 
 		it("approves via permit and then batchTransferFrom with references", async function () {
@@ -917,7 +915,7 @@ describe("TokenFactory & CurrencyToken", function () {
 
 			// ERC-7201 slot is a compile-time constant, so it is the same on every
 			// token. Isolation comes from each proxy being a distinct address.
-			const SLOT = "0x442239b2b9b30c3758ea54520206457758ec662da4e587c0ad8e5daa89aac300";
+			const SLOT = "0xdc94d7db4246dd77f914f0a8f819612576c37ea888c0a9f5eb0d934a215c9900";
 
 			const specs = [
 				{ symbol: "JPY0", decimals: 0 },

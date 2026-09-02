@@ -40,8 +40,10 @@ import {
 ///        entrypoints (exchanges, custodians, DEXes, most explorers' "send"
 ///        buttons) cannot move these tokens. That is intended for a closed-loop
 ///        gateway asset; it is not suitable for a freely tradable one;
-///      Storage: this contract's own state lives in an ERC-7201 namespace, so
-///      future versions may add parent contracts without colliding with it.
+///      Storage: all of this contract's own state — the decimals override and the
+///      payment-reference replay flags — lives in the ERC-7201 namespace
+///      `storage.CurrencyToken`, so no state of its own occupies a linear slot and
+///      future versions may add linear-storage parents without colliding with it.
 
 contract CurrencyToken is
     Initializable,
@@ -91,14 +93,17 @@ contract CurrencyToken is
 
     /// ********************************** Storage ****************************************
 
-    /// @custom:storage-location erc7201:=storage.CurrencyToken
+    /// @custom:storage-location erc7201:storage.CurrencyToken
     struct CurrencyTokenStorage {
         uint8 decimals;
+        /// @dev payment reference -> payer -> recipient -> amount -> used.
+        ///      Blocks an exact replay of the same referenced movement.
+        mapping(string => mapping(address => mapping(address => mapping(uint256 => bool)))) paymentReferenceUsed;
     }
 
     /// @dev keccak256(abi.encode(uint256(keccak256("storage.CurrencyToken")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant CURRENCY_TOKEN_STORAGE =
-        0x442239b2b9b30c3758ea54520206457758ec662da4e587c0ad8e5daa89aac300;
+        0xdc94d7db4246dd77f914f0a8f819612576c37ea888c0a9f5eb0d934a215c9900;
 
     function _currencyTokenStorage()
         private
@@ -109,12 +114,6 @@ contract CurrencyToken is
             $.slot := CURRENCY_TOKEN_STORAGE
         }
     }
-
-    /// ********************************** States ****************************************
-
-    /// @dev Mapping for payment reference -> sender -> recipient -> amount -> used. Prevents double-spending of a reference.
-    mapping(string => mapping(address => mapping(address => mapping(uint256 => bool))))
-        public paymentReferenceUsed;
 
     /// ********************************** Constructor ****************************************
 
@@ -165,7 +164,7 @@ contract CurrencyToken is
 
         super.transfer(to, amount);
 
-        paymentReferenceUsed[paymentReference][sender][to][amount] = true;
+        _markReferenceUsed(paymentReference, sender, to, amount);
 
         emit TransferSuccess(
             sender,
@@ -219,9 +218,7 @@ contract CurrencyToken is
 
             super.transfer(to[i], amounts[i]);
 
-            paymentReferenceUsed[references[i]][sender][to[i]][
-                amounts[i]
-            ] = true;
+            _markReferenceUsed(references[i], sender, to[i], amounts[i]);
 
             emit TransferSuccess(
                 sender,
@@ -248,7 +245,7 @@ contract CurrencyToken is
 
         super.transferFrom(from, to, amount);
 
-        paymentReferenceUsed[paymentReference][from][to][amount] = true;
+        _markReferenceUsed(paymentReference, from, to, amount);
 
         emit TransferSuccess(
             from,
@@ -284,9 +281,7 @@ contract CurrencyToken is
 
             super.transferFrom(from[i], to[i], amounts[i]);
 
-            paymentReferenceUsed[references[i]][from[i]][to[i]][
-                amounts[i]
-            ] = true;
+            _markReferenceUsed(references[i], from[i], to[i], amounts[i]);
 
             emit TransferSuccess(
                 from[i],
@@ -350,6 +345,20 @@ contract CurrencyToken is
         return _currencyTokenStorage().decimals;
     }
 
+    /// @notice Whether this exact (reference, payer, recipient, amount) movement
+    ///         has already been recorded.
+    function paymentReferenceUsed(
+        string calldata paymentReference,
+        address from,
+        address to,
+        uint256 amount
+    ) external view virtual returns (bool) {
+        return
+            _currencyTokenStorage().paymentReferenceUsed[paymentReference][
+                from
+            ][to][amount];
+    }
+
     /// ********************************** Pure ****************************************
 
     function version() external pure virtual returns (string memory) {
@@ -362,6 +371,17 @@ contract CurrencyToken is
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+
+    function _markReferenceUsed(
+        string calldata paymentReference,
+        address from,
+        address to,
+        uint256 amount
+    ) private {
+        _currencyTokenStorage().paymentReferenceUsed[paymentReference][from][
+            to
+        ][amount] = true;
+    }
 
     function _validateReferenced(
         uint256 amount,
@@ -377,7 +397,11 @@ contract CurrencyToken is
             revert EmptyReference();
         }
 
-        if (paymentReferenceUsed[paymentReference][from][to][amount]) {
+        if (
+            _currencyTokenStorage().paymentReferenceUsed[paymentReference][
+                from
+            ][to][amount]
+        ) {
             revert ReferenceAlreadyUsed();
         }
     }
