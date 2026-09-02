@@ -3,7 +3,7 @@
     "require": ["dotenv/config"]
   },
   "compilerOptions": {
-    "types": ["hardhat"],
+    "types": ["hardhat", "chai-as-promised"],
     "target": "es2020",
     "module": "commonjs",
     "esModuleInterop": true,

@@ -6,14 +6,16 @@
     "deploy:logic": "npx hardhat run scripts/deployLogic.js --network",
     "verify:logic": "npx hardhat verify --contract contracts/SmartWallet.sol:SmartWallet --network",
     "deploy:factory": "npx hardhat run scripts/deployFactory.js --network",
-    "deploy:smartWalletFactoryV1": "npx hardhat run scripts/deploy.ts --network",
+    "deploy:smartWalletFactory": "npx hardhat run scripts/deploySmartWalletFactory.ts --network",
     "deploy:tokenFactory": "npx hardhat run scripts/deployTokenFactory.ts --network",
     "verify:factory": "npx hardhat verify --contract contracts/SmartWalletFactory.sol:SmartWalletFactory --network",
     "verify:tokenFactory": "npx hardhat verify --contract contracts/TokenFactory/TokenFactory.sol:TokenFactory --network",
     "predict:wallet": "npx hardhat run scripts/predictWallet.js --network",
     "create:wallet": "npx hardhat run scripts/createWallet.js --network",
     "verify:wallet": "npx hardhat verify --contract contracts/SmartWalletProxy.sol:SmartWalletProxy --constructor-args scripts/args.js --network",
-    "coverage": "COVERAGE=true npx hardhat coverage"
+    "coverage": "COVERAGE=true npx hardhat coverage",
+    "kms:address": "npx hardhat run scripts/kmsAddress.ts --network",
+    "doctor": "npx hardhat run scripts/doctor.ts --network"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
@@ -27,6 +29,7 @@
   },
   "dependencies": {
     "@account-abstraction/contracts": "^0.8.0",
+    "@aws-sdk/client-kms": "^3.1123.0",
     "@chainlink/contracts": "^1.1.1",
     "@openzeppelin/contracts": "^5.4.0",
     "@openzeppelin/contracts-upgradeable": "^5.4.0",
