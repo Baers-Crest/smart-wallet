@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { GetPublicKeyCommand, SignCommand, KMSClient } from "@aws-sdk/client-kms";
+import type { SigningKey } from "ethers";
 import { KmsSigner, decodeDerSignature, normalizeS, explainKmsError } from "../scripts/signers/KmsSigner";
 
 const SECP256K1_N = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
@@ -30,7 +31,7 @@ function derSignature(r: bigint, s: bigint): Buffer {
  * DER and Sign with real DER-encoded ECDSA, without ever contacting AWS.
  */
 class FakeKms {
-	readonly signingKey: ethers.SigningKey;
+	readonly signingKey: SigningKey;
 	readonly address: string;
 
 	/** KMS is free to return a non-canonical high-s value; emulate that. */

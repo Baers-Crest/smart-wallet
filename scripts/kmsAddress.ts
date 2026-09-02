@@ -16,9 +16,9 @@ async function main() {
 
 	const address = await new KmsSigner(keyId).getAddress();
 
-	console.log("KMS key:  ", keyId);
+	console.log("KMS key:    ", keyId);
 	console.log("AWS profile:", process.env.AWS_PROFILE ?? "(default)");
-	console.log("Address:  ", address);
+	console.log("Address:    ", address);
 }
 
 main().catch(error => {

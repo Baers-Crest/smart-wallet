@@ -2,15 +2,15 @@ import { ethers } from "hardhat";
 import { getDeployer } from "./signers/getDeployer";
 
 async function main() {
+	// getDeployer already prints the source, address, chain and balance.
 	const deployer = await getDeployer();
 	const deployerAddress = await deployer.getAddress();
-
-	console.log("Deploying with:", deployerAddress);
-
 	const balance = await deployer.provider!.getBalance(deployerAddress);
-	console.log("Balance (ETH):", ethers.formatEther(balance));
 
-	const Factory = await ethers.getContractFactory("SmartWalletFactoryV1");
+	// The signer must be passed explicitly: without it the factory falls back to
+	// hardhat's first configured account, so a DEPLOYER_SIGNER=kms run would
+	// report the KMS address but sign with PRIVATE_KEY.
+	const Factory = await ethers.getContractFactory("SmartWalletFactoryV1", deployer);
 
 	// 1️⃣ Build deploy tx
 	const deployTx = await Factory.getDeployTransaction();

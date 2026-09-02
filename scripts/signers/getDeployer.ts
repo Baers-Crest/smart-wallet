@@ -18,9 +18,11 @@ const MAINNET_CHAIN_IDS = new Set([1n, 137n]);
  * The mode is explicit on purpose: a mainnet deploy must never silently fall
  * back to a raw key because a KMS variable was mistyped.
  */
-export async function getDeployer(): Promise<Signer> {
+export async function getDeployer(options: { quiet?: boolean } = {}): Promise<Signer> {
 	const mode = (process.env.DEPLOYER_SIGNER ?? "local").toLowerCase();
 	const network = await ethers.provider.getNetwork();
+	// The preflight prints its own report; a second banner inside it is noise.
+	const announce = options.quiet ? async () => {} : printBanner;
 
 	if (mode === "kms") {
 		const keyId = process.env.AWS_KMS_KEY_ID;
@@ -52,12 +54,16 @@ export async function getDeployer(): Promise<Signer> {
 		);
 	}
 
-	await announce(signer, "local private key (.env PRIVATE_KEY)", network.chainId);
+	// On localhost/hardhat the accounts come from the node, not from .env — say
+	// which, so the banner never claims a key that is not in play.
+	const source = process.env.PRIVATE_KEY ? "local private key (.env PRIVATE_KEY)" : "account supplied by the node";
+
+	await announce(signer, source, network.chainId);
 
 	return signer;
 }
 
-async function announce(signer: Signer, source: string, chainId: bigint): Promise<void> {
+async function printBanner(signer: Signer, source: string, chainId: bigint): Promise<void> {
 	const address = await signer.getAddress();
 	const balance = await ethers.provider.getBalance(address);
 

@@ -33,6 +33,15 @@ async function withTimeout<T>(label: string, run: () => Promise<T>): Promise<T> 
 	}
 }
 
+/** Path of an RPC URL, or "" if it does not parse — never throws. */
+function safePathname(url: string): string {
+	try {
+		return new URL(url).pathname;
+	} catch {
+		return "";
+	}
+}
+
 /** Hides the API key in an RPC URL so the output is safe to paste. */
 function maskUrl(url: string): string {
 	try {
@@ -52,7 +61,7 @@ function maskUrl(url: string): string {
 	}
 }
 
-async function checkProxy() {
+function checkProxy() {
 	const vars = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
 	const set = vars.filter(v => process.env[v]);
 
@@ -78,7 +87,9 @@ async function checkRpc() {
 		return;
 	}
 
-	if (/\/(undefined|null|)$/.test(new URL(url).pathname)) {
+	// `${process.env.INFURA_API_KEY}` interpolates to the literal "undefined"
+	// when unset. A URL with no path at all (http://127.0.0.1:8545) is fine.
+	if (/\/(undefined|null)$/.test(safePathname(url))) {
 		record("RPC", false, `${maskUrl(url)} — the API key is missing. Check INFURA_API_KEY in .env`);
 		return;
 	}
@@ -138,7 +149,7 @@ async function checkDeployerBalance() {
 
 	try {
 		const { getDeployer } = await import("./signers/getDeployer");
-		const deployer = await withTimeout("Deployer", () => getDeployer());
+		const deployer = await withTimeout("Deployer", () => getDeployer({ quiet: true }));
 		const address = await deployer.getAddress();
 		const balance = await ethers.provider.getBalance(address);
 
@@ -155,14 +166,18 @@ async function checkDeployerBalance() {
 function checkEnv() {
 	const mode = (process.env.DEPLOYER_SIGNER ?? "local").toLowerCase();
 
-	const required = [
-		...(mode === "kms"
-			? ([
+	// localhost and hardhat take their accounts from the node, not PRIVATE_KEY.
+	const needsPrivateKey = !["localhost", "hardhat"].includes(hre.network.name);
+
+	const required: [string, unknown][] =
+		mode === "kms"
+			? [
 					["AWS_KMS_KEY_ID", process.env.AWS_KMS_KEY_ID],
 					["AWS_PROFILE", process.env.AWS_PROFILE]
-			  ] as [string, string | undefined][])
-			: ([["PRIVATE_KEY", process.env.PRIVATE_KEY]] as [string, string | undefined][]))
-	] as [string, string | undefined][];
+			  ]
+			: needsPrivateKey
+			? [["PRIVATE_KEY", process.env.PRIVATE_KEY]]
+			: [];
 
 	const missing = required.filter(([, value]) => !value).map(([name]) => name);
 
@@ -173,7 +188,7 @@ async function main() {
 	console.log(`\nPreflight — network '${hre.network.name}', timeout ${TIMEOUT_MS}ms\n`);
 
 	checkEnv();
-	await checkProxy();
+	checkProxy();
 	await checkRpc();
 	await checkKms();
 	await checkDeployerBalance();

@@ -166,9 +166,10 @@ export class KmsSigner extends AbstractSigner {
 
 		const { r, s } = decodeDerSignature(Buffer.from(der));
 		const address = await this.getAddress();
+		const lowS = toHex32(normalizeS(s));
 
 		for (const v of [27, 28]) {
-			const candidate = Signature.from({ r: toHex32(r), s: toHex32(normalizeS(s)), v });
+			const candidate = Signature.from({ r: toHex32(r), s: lowS, v });
 
 			if (recoverAddress(digest, candidate).toLowerCase() === address.toLowerCase()) {
 				return candidate;
