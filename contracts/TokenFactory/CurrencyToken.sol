@@ -91,12 +91,12 @@ contract CurrencyToken is
 
     /// ********************************** Storage ****************************************
 
-    /// @custom:storage-location erc7201:kumaapay.storage.CurrencyToken
+    /// @custom:storage-location erc7201:=storage.CurrencyToken
     struct CurrencyTokenStorage {
         uint8 decimals;
     }
 
-    /// @dev keccak256(abi.encode(uint256(keccak256("kumaapay.storage.CurrencyToken")) - 1)) & ~bytes32(uint256(0xff))
+    /// @dev keccak256(abi.encode(uint256(keccak256("storage.CurrencyToken")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant CURRENCY_TOKEN_STORAGE =
         0x442239b2b9b30c3758ea54520206457758ec662da4e587c0ad8e5daa89aac300;
 
