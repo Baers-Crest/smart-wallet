@@ -1,79 +1,232 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {
+    ERC20Upgradeable
+} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {
+    ERC20PermitUpgradeable
+} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
+import {
+    ERC20PausableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PausableUpgradeable.sol";
+import {
+    Ownable2StepUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {
+    UUPSUpgradeable
+} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {
+    Initializable
+} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract CurrencyToken is ERC20Permit, Ownable {
+/// @title CurrencyToken
+/// @notice Closed-loop gateway token deployed by {TokenFactory} behind a UUPS proxy.
+/// @dev
+///      - each token is its own ERC-1967 proxy; upgrades are authorised per token
+///        by that token's owner via {_authorizeUpgrade}. Tokens do not share an
+///        upgrade authority, so one token's migration cannot touch another's;
+///      - ownership transfer is two-step and renouncing is disabled, so a mistyped
+///        address can never strand `mint`/`burn`/`pause`/upgrade rights;
+///      - all balance movements (including `mint`/`burn`) are pausable by the owner;
+///      - `TransferSuccess` indexes `keccak256(bytes(paymentReference))` instead of
+///        `value`, making off-chain reconciliation a direct log lookup;
+///      - the plain ERC-20 `transfer(address,uint256)` and
+///        `transferFrom(address,address,uint256)` entrypoints always revert with
+///        {ReferenceRequired}. Every balance movement between accounts must carry
+///        a payment reference so it lands in the reconciliation log. NOTE: this
+///        is a deliberate deviation from ERC-20 — the token keeps the standard's
+///        ABI but not its behaviour, so venues that call the two-argument
+///        entrypoints (exchanges, custodians, DEXes, most explorers' "send"
+///        buttons) cannot move these tokens. That is intended for a closed-loop
+///        gateway asset; it is not suitable for a freely tradable one;
+///      Storage: all of this contract's own state — the decimals override and the
+///      payment-reference replay flags — lives in the ERC-7201 namespace
+///      `storage.CurrencyToken`, so no state of its own occupies a linear slot and
+///      future versions may add linear-storage parents without colliding with it.
+
+contract CurrencyToken is
+    Initializable,
+    ERC20Upgradeable,
+    ERC20PermitUpgradeable,
+    ERC20PausableUpgradeable,
+    Ownable2StepUpgradeable,
+    UUPSUpgradeable
+{
     /// ********************************** Events ****************************************
 
+    /// @notice Emitted for every transfer that carries a payment reference.
+    /// @param from Sender of the funds.
+    /// @param to Recipient of the funds.
+    /// @param referenceHash `keccak256(bytes(paymentReference))`, indexed so
+    ///        reconciliation can look a payment up directly instead of scanning
+    ///        block ranges.
+    /// @param value Amount transferred, in token units.
+    /// @param paymentReference The plain-text reference, carried in the data section.
     event TransferSuccess(
         address indexed from,
         address indexed to,
-        uint256 indexed value,
-        string _reference
+        bytes32 indexed referenceHash,
+        uint256 value,
+        string paymentReference
     );
 
     /// ********************************** Errors ****************************************
 
-    error TransferFailed(
-        address from,
-        address to,
-        uint256 value,
-        string _reference
-    );
+    /// @notice A referenced transfer, mint or burn was attempted with a zero amount.
+    error ZeroAmount();
+    /// @notice A referenced transfer was attempted with an empty reference string.
+    error EmptyReference();
+    /// @notice Batch input arrays are not all the same length.
+    error LengthMismatch();
+    /// @notice A batch call was made with no entries.
+    error EmptyBatch();
+    /// @notice `renounceOwnership` is permanently disabled on this token.
+    error RenounceDisabled();
+    /// @notice The token owner was given as the zero address.
+    error ZeroAddress();
+    /// @notice A referenced transfer was attempted with a reference that has already been used.
+    error ReferenceAlreadyUsed();
+    /// @notice The plain ERC-20 entrypoints are disabled; use the overload that
+    ///         takes a payment reference.
+    error ReferenceRequired();
 
-    /// ********************************** Private States ****************************************
-    uint8 private _decimals;
+    /// ********************************** Storage ****************************************
+
+    /// @custom:storage-location erc7201:storage.CurrencyToken
+    struct CurrencyTokenStorage {
+        uint8 decimals;
+        /// @dev payment reference -> payer -> recipient -> amount -> used.
+        ///      Blocks an exact replay of the same referenced movement.
+        mapping(string => mapping(address => mapping(address => mapping(uint256 => bool)))) paymentReferenceUsed;
+    }
+
+    /// @dev keccak256(abi.encode(uint256(keccak256("storage.CurrencyToken")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant CURRENCY_TOKEN_STORAGE =
+        0xdc94d7db4246dd77f914f0a8f819612576c37ea888c0a9f5eb0d934a215c9900;
+
+    function _currencyTokenStorage()
+        private
+        pure
+        returns (CurrencyTokenStorage storage $)
+    {
+        assembly {
+            $.slot := CURRENCY_TOKEN_STORAGE
+        }
+    }
 
     /// ********************************** Constructor ****************************************
 
-    constructor(
+    /// @dev Locks the implementation so it can only ever be used through a proxy.
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// ********************************** Initializer ****************************************
+
+    function initialize(
         string memory _name,
         string memory _symbol,
         address _owner,
         uint8 _tokenDecimals,
         uint256 _initialSupply
-    ) ERC20Permit(_name) ERC20(_name, _symbol) Ownable(_owner) {
-        _mint(_owner, _initialSupply);
-        _decimals = _tokenDecimals;
-    }
+    ) public initializer {
+        if (_owner == address(0)) {
+            revert ZeroAddress();
+        }
 
-    /// ********************************** Functions ****************************************
-    function transfer(
-        address to,
-        uint256 amount,
-        string memory _reference
-    ) public virtual {
-        if (super.transfer(to, amount)) {
-            emit TransferSuccess(_msgSender(), to, amount, _reference);
-        } else {
-            revert TransferFailed(_msgSender(), to, amount, _reference);
+        __ERC20_init(_name, _symbol);
+        __ERC20Permit_init(_name);
+        __ERC20Pausable_init();
+        __Ownable_init(_owner);
+        __Ownable2Step_init();
+        __UUPSUpgradeable_init();
+
+        _currencyTokenStorage().decimals = _tokenDecimals;
+
+        if (_initialSupply != 0) {
+            _mint(_owner, _initialSupply);
         }
     }
 
+    /// ********************************** Transfers ****************************************
+
+    /// @notice Transfer with a payment reference recorded in {TransferSuccess}.
+    function transfer(
+        address to,
+        uint256 amount,
+        string calldata paymentReference
+    ) external virtual {
+        address sender = _msgSender();
+
+        _validateReferenced(amount, paymentReference, sender, to);
+
+        super.transfer(to, amount);
+
+        _markReferenceUsed(paymentReference, sender, to, amount);
+
+        emit TransferSuccess(
+            sender,
+            to,
+            keccak256(bytes(paymentReference)),
+            amount,
+            paymentReference
+        );
+    }
+
+    /// @notice Disabled. Use {transfer(address,uint256,string)} instead.
+    /// @dev Kept in the ABI for ERC-20 shape, but always reverts: an unreferenced
+    ///      movement would never reach the reconciliation log.
+    function transfer(
+        address,
+        uint256
+    ) public pure virtual override returns (bool) {
+        revert ReferenceRequired();
+    }
+
+    /// @notice Disabled. Use {transferFrom(address,address,uint256,string)} instead.
+    /// @dev Kept in the ABI for ERC-20 shape, but always reverts: an unreferenced
+    ///      movement would never reach the reconciliation log.
+    function transferFrom(
+        address,
+        address,
+        uint256
+    ) public pure virtual override returns (bool) {
+        revert ReferenceRequired();
+    }
+
+    /// @notice Transfer to many recipients, each with its own payment reference.
     function batchTransfer(
         address[] calldata to,
         uint256[] calldata amounts,
         string[] calldata references
-    ) external {
+    ) external virtual {
         uint256 len = to.length;
 
-        require(
-            len == amounts.length && len == references.length,
-            "Length mismatch"
-        );
+        if (len == 0) {
+            revert EmptyBatch();
+        }
+        if (len != amounts.length || len != references.length) {
+            revert LengthMismatch();
+        }
 
         address sender = _msgSender();
 
         for (uint256 i = 0; i < len; ) {
-            bool success = super.transfer(to[i], amounts[i]);
+            _validateReferenced(amounts[i], references[i], sender, to[i]);
 
-            if (success) {
-                emit TransferSuccess(sender, to[i], amounts[i], references[i]);
-            } else {
-                revert TransferFailed(sender, to[i], amounts[i], references[i]);
-            }
+            super.transfer(to[i], amounts[i]);
+
+            _markReferenceUsed(references[i], sender, to[i], amounts[i]);
+
+            emit TransferSuccess(
+                sender,
+                to[i],
+                keccak256(bytes(references[i])),
+                amounts[i],
+                references[i]
+            );
 
             unchecked {
                 ++i;
@@ -81,49 +234,62 @@ contract CurrencyToken is ERC20Permit, Ownable {
         }
     }
 
+    /// @notice Allowance-based transfer with a payment reference.
     function transferFrom(
         address from,
         address to,
         uint256 amount,
-        string memory _reference
-    ) public virtual {
-        bool success = super.transferFrom(from, to, amount);
+        string calldata paymentReference
+    ) external virtual {
+        _validateReferenced(amount, paymentReference, from, to);
 
-        if (success) {
-            emit TransferSuccess(from, to, amount, _reference);
-        } else {
-            revert TransferFailed(from, to, amount, _reference);
-        }
+        super.transferFrom(from, to, amount);
+
+        _markReferenceUsed(paymentReference, from, to, amount);
+
+        emit TransferSuccess(
+            from,
+            to,
+            keccak256(bytes(paymentReference)),
+            amount,
+            paymentReference
+        );
     }
 
+    /// @notice Allowance-based transfers for many payers/recipients.
     function batchTransferFrom(
         address[] calldata from,
         address[] calldata to,
         uint256[] calldata amounts,
         string[] calldata references
-    ) external {
+    ) external virtual {
         uint256 len = to.length;
 
-        require(
-            len == amounts.length &&
-                len == references.length &&
-                len == from.length,
-            "Length mismatch"
-        );
+        if (len == 0) {
+            revert EmptyBatch();
+        }
+        if (
+            len != from.length ||
+            len != amounts.length ||
+            len != references.length
+        ) {
+            revert LengthMismatch();
+        }
 
         for (uint256 i = 0; i < len; ) {
-            bool success = super.transferFrom(from[i], to[i], amounts[i]);
+            _validateReferenced(amounts[i], references[i], from[i], to[i]);
 
-            if (success) {
-                emit TransferSuccess(from[i], to[i], amounts[i], references[i]);
-            } else {
-                revert TransferFailed(
-                    from[i],
-                    to[i],
-                    amounts[i],
-                    references[i]
-                );
-            }
+            super.transferFrom(from[i], to[i], amounts[i]);
+
+            _markReferenceUsed(references[i], from[i], to[i], amounts[i]);
+
+            emit TransferSuccess(
+                from[i],
+                to[i],
+                keccak256(bytes(references[i])),
+                amounts[i],
+                references[i]
+            );
 
             unchecked {
                 ++i;
@@ -131,15 +297,120 @@ contract CurrencyToken is ERC20Permit, Ownable {
         }
     }
 
-    function mint(address to, uint256 amount) public onlyOwner {
+    /// ********************************** Supply ****************************************
+
+    /// @notice Mint new supply. Owner only.
+    function mint(address to, uint256 amount) external onlyOwner {
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+
         _mint(to, amount);
     }
 
-    function burn(address from, uint256 amount) public onlyOwner {
+    /// @notice Burn supply from any holder, without allowance. Owner only.
+    /// @dev Deliberate for a closed-loop gateway token; treat as a monitored
+    ///      invariant — see the contract-level trust assumption.
+    function burn(address from, uint256 amount) external onlyOwner {
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+
         _burn(from, amount);
     }
 
+    /// ********************************** Pausing ****************************************
+
+    /// @notice Halt all balance movements, including mint and burn. Owner only.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume balance movements. Owner only.
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /// ********************************** Ownership ****************************************
+
+    /// @notice Permanently disabled: renouncing would strand `mint`, `burn`,
+    ///         `pause` and the upgrade authority with no way to recover them.
+    function renounceOwnership() public view override onlyOwner {
+        revert RenounceDisabled();
+    }
+
+    /// ********************************** Views ****************************************
+
     function decimals() public view virtual override returns (uint8) {
-        return _decimals;
+        return _currencyTokenStorage().decimals;
+    }
+
+    /// @notice Whether this exact (reference, payer, recipient, amount) movement
+    ///         has already been recorded.
+    function paymentReferenceUsed(
+        string calldata paymentReference,
+        address from,
+        address to,
+        uint256 amount
+    ) external view virtual returns (bool) {
+        return
+            _currencyTokenStorage().paymentReferenceUsed[paymentReference][
+                from
+            ][to][amount];
+    }
+
+    /// ********************************** Pure ****************************************
+
+    function version() external pure virtual returns (string memory) {
+        return "v1";
+    }
+
+    /// ********************************** Internal ****************************************
+
+    /// @dev Only this token's owner may upgrade this token's implementation.
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
+
+    function _markReferenceUsed(
+        string calldata paymentReference,
+        address from,
+        address to,
+        uint256 amount
+    ) private {
+        _currencyTokenStorage().paymentReferenceUsed[paymentReference][from][
+            to
+        ][amount] = true;
+    }
+
+    function _validateReferenced(
+        uint256 amount,
+        string calldata paymentReference,
+        address from,
+        address to
+    ) private view {
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+
+        if (bytes(paymentReference).length == 0) {
+            revert EmptyReference();
+        }
+
+        if (
+            _currencyTokenStorage().paymentReferenceUsed[paymentReference][
+                from
+            ][to][amount]
+        ) {
+            revert ReferenceAlreadyUsed();
+        }
+    }
+
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual override(ERC20Upgradeable, ERC20PausableUpgradeable) {
+        super._update(from, to, value);
     }
 }
