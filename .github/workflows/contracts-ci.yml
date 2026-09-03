@@ -1,0 +1,38 @@
+name: contracts-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: npm ci
+
+      # Runs with --max-warnings 0: any error OR warning fails the job.
+      # The TokenFactory tree is at zero of both — see docs/SECURITY_TOOLING.md.
+      - name: solhint
+        run: npm run lint:sol
+
+      - name: install slither
+        run: pip install -r requirements-dev.txt
+
+      # slither.config.json sets fail_on: pedantic, so ANY new finding in
+      # contracts/TokenFactory fails the job. Suppress a reviewed one with a
+      # `// slither-disable-next-line <detector>` comment plus a reason, not by
+      # loosening the config.
+      - name: slither
+        run: npm run slither

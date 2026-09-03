@@ -102,16 +102,20 @@ contract CurrencyToken is
     }
 
     /// @dev keccak256(abi.encode(uint256(keccak256("storage.CurrencyToken")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant CURRENCY_TOKEN_STORAGE =
+    bytes32 private constant _CURRENCY_TOKEN_STORAGE =
         0xdc94d7db4246dd77f914f0a8f819612576c37ea888c0a9f5eb0d934a215c9900;
 
+    /// @dev Assembly is unavoidable here: ERC-7201 requires binding a struct
+    ///      pointer to a fixed slot, which Solidity has no expression for.
+    // slither-disable-next-line assembly
     function _currencyTokenStorage()
         private
         pure
         returns (CurrencyTokenStorage storage $)
     {
+        // solhint-disable-next-line no-inline-assembly
         assembly {
-            $.slot := CURRENCY_TOKEN_STORAGE
+            $.slot := _CURRENCY_TOKEN_STORAGE
         }
     }
 
@@ -125,6 +129,14 @@ contract CurrencyToken is
 
     /// ********************************** Initializer ****************************************
 
+    /// @notice Initialize a freshly deployed token proxy.
+    /// @dev Called by {TokenFactory.deployToken} as part of proxy construction.
+    /// @param _name ERC-20 name, also used as the EIP-712 domain name for permit.
+    /// @param _symbol ERC-20 symbol.
+    /// @param _owner Account granted `mint`/`burn`/`pause` and upgrade rights
+    ///        over this token. Must not be the zero address.
+    /// @param _tokenDecimals Number of decimals this token reports.
+    /// @param _initialSupply Amount minted to `_owner` here; may be zero.
     function initialize(
         string memory _name,
         string memory _symbol,
@@ -152,6 +164,11 @@ contract CurrencyToken is
     /// ********************************** Transfers ****************************************
 
     /// @notice Transfer with a payment reference recorded in {TransferSuccess}.
+    /// @param to Recipient of the funds.
+    /// @param amount Amount to transfer, in token units. Must be non-zero.
+    /// @param paymentReference Reconciliation reference. Must be non-empty, and
+    ///        must not already have been used for this exact
+    ///        (reference, payer, recipient, amount) movement.
     function transfer(
         address to,
         uint256 amount,
@@ -196,6 +213,11 @@ contract CurrencyToken is
     }
 
     /// @notice Transfer to many recipients, each with its own payment reference.
+    /// @dev All three arrays are index-aligned and must be the same non-zero
+    ///      length. The whole batch reverts if any single entry is invalid.
+    /// @param to Recipients of the funds.
+    /// @param amounts Amount per recipient, in token units.
+    /// @param references Reconciliation reference per recipient.
     function batchTransfer(
         address[] calldata to,
         uint256[] calldata amounts,
@@ -234,6 +256,11 @@ contract CurrencyToken is
     }
 
     /// @notice Allowance-based transfer with a payment reference.
+    /// @param from Payer whose allowance to the caller is spent.
+    /// @param to Recipient of the funds.
+    /// @param amount Amount to transfer, in token units. Must be non-zero.
+    /// @param paymentReference Reconciliation reference. Must be non-empty and
+    ///        not already used for this exact movement.
     function transferFrom(
         address from,
         address to,
@@ -256,6 +283,12 @@ contract CurrencyToken is
     }
 
     /// @notice Allowance-based transfers for many payers/recipients.
+    /// @dev All four arrays are index-aligned and must be the same non-zero
+    ///      length. The whole batch reverts if any single entry is invalid.
+    /// @param from Payer per entry; each must have allowed the caller.
+    /// @param to Recipient per entry.
+    /// @param amounts Amount per entry, in token units.
+    /// @param references Reconciliation reference per entry.
     function batchTransferFrom(
         address[] calldata from,
         address[] calldata to,
@@ -299,6 +332,8 @@ contract CurrencyToken is
     /// ********************************** Supply ****************************************
 
     /// @notice Mint new supply. Owner only.
+    /// @param to Account credited with the new supply.
+    /// @param amount Amount to mint, in token units. Must be non-zero.
     function mint(address to, uint256 amount) external onlyOwner {
         if (amount == 0) {
             revert ZeroAmount();
@@ -310,6 +345,8 @@ contract CurrencyToken is
     /// @notice Burn supply from any holder, without allowance. Owner only.
     /// @dev Deliberate for a closed-loop gateway token; treat as a monitored
     ///      invariant — see the contract-level trust assumption.
+    /// @param from Holder whose balance is destroyed. No allowance is required.
+    /// @param amount Amount to burn, in token units. Must be non-zero.
     function burn(address from, uint256 amount) external onlyOwner {
         if (amount == 0) {
             revert ZeroAmount();
@@ -340,12 +377,21 @@ contract CurrencyToken is
 
     /// ********************************** Views ****************************************
 
+    /// @notice Number of decimals this token reports, as set at initialization.
+    /// @dev Overrides the ERC-20 default of 18; the value lives in this
+    ///      contract's ERC-7201 namespace, not in a linear slot.
+    /// @return Configured decimals for this token.
     function decimals() public view virtual override returns (uint8) {
         return _currencyTokenStorage().decimals;
     }
 
     /// @notice Whether this exact (reference, payer, recipient, amount) movement
     ///         has already been recorded.
+    /// @param paymentReference Reconciliation reference to look up.
+    /// @param from Payer of the movement.
+    /// @param to Recipient of the movement.
+    /// @param amount Amount of the movement, in token units.
+    /// @return True if this exact movement has already been recorded.
     function paymentReferenceUsed(
         string calldata paymentReference,
         address from,
@@ -360,6 +406,8 @@ contract CurrencyToken is
 
     /// ********************************** Pure ****************************************
 
+    /// @notice Implementation version of this token.
+    /// @return Version identifier of this implementation.
     function version() external pure virtual returns (string memory) {
         return "v1";
     }
