@@ -24,17 +24,17 @@ Both scripts print the signing source, address, chain id and balance before send
 
 ## Environment variables
 
-| Variable                   | Mode          | Meaning                                                                |
-| -------------------------- | ------------- | ---------------------------------------------------------------------- |
-| `DEPLOYER_SIGNER`          | both          | `kms` or `local` (default `local`)                                     |
-| `INFURA_API_KEY`           | both          | RPC access                                                             |
-| `PRIVATE_KEY`              | local         | Raw deployer key                                                       |
-| `ALLOW_RAW_KEY_ON_MAINNET` | local         | `true` to override the mainnet refusal                                 |
-| `AWS_KMS_KEY_ID`           | kms           | Key id, ARN, or `alias/...`                                            |
-| `AWS_PROFILE`              | kms           | SSO profile to use                                                     |
-| `AWS_REGION`               | kms           | Only if the profile sets no region                                     |
-| `FACTORY_ADMIN_ADDRESS`    | token factory | Granted `DEFAULT_ADMIN_ROLE` + `PAUSER_ROLE`. Defaults to the deployer |
-| `TOKEN_DEPLOYER_ADDRESS`   | token factory | Granted `DEPLOYER_ROLE`. Defaults to the deployer                      |
+| Variable                   | Mode          | Meaning                                       |
+| -------------------------- | ------------- | --------------------------------------------- |
+| `DEPLOYER_SIGNER`          | both          | `kms` or `local` (default `local`)            |
+| `INFURA_API_KEY`           | both          | RPC access                                    |
+| `PRIVATE_KEY`              | local         | Raw deployer key                              |
+| `ALLOW_RAW_KEY_ON_MAINNET` | local         | `true` to override the mainnet refusal        |
+| `AWS_KMS_KEY_ID`           | kms           | Key id, ARN, or `alias/...`                   |
+| `AWS_PROFILE`              | kms           | SSO profile to use                            |
+| `AWS_REGION`               | kms           | Only if the profile sets no region            |
+| `FACTORY_ADMIN_ADDRESS`    | token factory | Granted `DEFAULT_ADMIN_ROLE` + `PAUSER_ROLE`. |
+| `TOKEN_DEPLOYER_ADDRESS`   | token factory | Granted `DEPLOYER_ROLE`.                      |
 
 `deploy:smartWalletFactory` reads no address variables — the factory takes no constructor arguments and grants no roles.
 
@@ -166,8 +166,6 @@ aws kms create-key --key-spec ECC_SECG_P256K1 --key-usage SIGN_VERIFY
 ```
 
 **`does not recover to <address>`** — the signature did not recover to the key's own address. Fails closed, signs nothing. Check `AWS_KMS_KEY_ID`.
-
-**`ConnectTimeoutError` / `UND_ERR_CONNECT_TIMEOUT`** — never KMS. `undici` is Hardhat's HTTP client; the AWS SDK uses Node's `https` via `@smithy/node-http-handler`. A _connect_ timeout means the TCP handshake never completed, so it is a network path, not auth. In order of likelihood:
 
 **`Refusing to deploy to chain 137 with a raw private key`** — intended. Use `DEPLOYER_SIGNER=kms`.
 

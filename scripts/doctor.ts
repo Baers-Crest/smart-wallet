@@ -1,5 +1,4 @@
 import hre, { ethers } from "hardhat";
-import type { HttpNetworkConfig } from "hardhat/types";
 
 /**
  * Preflight for deployments: checks each external dependency separately so a

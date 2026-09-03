@@ -24,7 +24,6 @@ async function main() {
 		throw new Error(`TOKEN_DEPLOYER_ADDRESS is not a valid address: ${tokenDeployer}`);
 	}
 
-	// Defaults to the deployer, which is the KMS admin key in a KMS deploy.
 	const admin = process.env.FACTORY_ADMIN_ADDRESS;
 	if (!ethers.isAddress(admin)) {
 		throw new Error(`FACTORY_ADMIN_ADDRESS is not a valid address: ${admin}`);
