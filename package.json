@@ -14,6 +14,7 @@
     "deploy:tokenFactory": "npx hardhat run scripts/deployTokenFactory.ts --network",
     "verify:factory": "npx hardhat verify --contract contracts/SmartWalletV1/SmartWalletFactory.sol:SmartWalletFactoryV1 --network",
     "verify:tokenFactory": "npx hardhat verify --contract contracts/TokenFactory/TokenFactory.sol:TokenFactory --network",
+    "verify:currencyTokenImplementation": "npx hardhat verify --contract contracts/TokenFactory/CurrencyToken.sol:CurrencyToken --network",
     "predict:wallet": "npx hardhat run scripts/predictWallet.js --network",
     "create:wallet": "npx hardhat run scripts/createWallet.js --network",
     "verify:wallet": "npx hardhat verify --contract contracts/SmartWalletProxy.sol:SmartWalletProxy --constructor-args scripts/args.js --network",
