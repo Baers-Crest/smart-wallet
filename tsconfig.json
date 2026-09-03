@@ -3,13 +3,14 @@
     "require": ["dotenv/config"]
   },
   "compilerOptions": {
-    "types": ["hardhat"],
+    "types": ["hardhat", "chai-as-promised"],
     "target": "es2020",
     "module": "commonjs",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "noUnusedLocals": true
   }
 }
