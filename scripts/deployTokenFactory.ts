@@ -16,7 +16,7 @@ async function main() {
 	const deployer = await getDeployer();
 	const deployerAddress = await deployer.getAddress();
 
-	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS ?? deployerAddress;
+	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS;
 	if (!tokenDeployer) {
 		throw new Error("TOKEN_DEPLOYER_ADDRESS is not set");
 	}
@@ -25,7 +25,7 @@ async function main() {
 	}
 
 	// Defaults to the deployer, which is the KMS admin key in a KMS deploy.
-	const admin = process.env.FACTORY_ADMIN_ADDRESS ?? deployerAddress;
+	const admin = process.env.FACTORY_ADMIN_ADDRESS;
 	if (!ethers.isAddress(admin)) {
 		throw new Error(`FACTORY_ADMIN_ADDRESS is not a valid address: ${admin}`);
 	}

@@ -13,10 +13,10 @@ The wallet script deploys `SmartWalletFactoryV1` from [`contracts/SmartWalletV1/
 
 Both scripts resolve their signer through [`scripts/signers/getDeployer.ts`](../scripts/signers/getDeployer.ts).
 
-| Mode | `DEPLOYER_SIGNER` | Key lives in | Use for |
-| --- | --- | --- | --- |
-| Local key | `local` (default) | `PRIVATE_KEY` in `.env` | localhost, Sepolia, Amoy |
-| AWS KMS | `kms` | AWS KMS, never leaves it | Mainnet, Polygon |
+| Mode      | `DEPLOYER_SIGNER` | Key lives in             | Use for                  |
+| --------- | ----------------- | ------------------------ | ------------------------ |
+| Local key | `local` (default) | `PRIVATE_KEY` in `.env`  | localhost, Sepolia, Amoy |
+| AWS KMS   | `kms`             | AWS KMS, never leaves it | Mainnet, Polygon         |
 
 There is no fallback between them: a mistyped KMS variable fails the deploy rather than quietly signing with a raw key. Deploying to chain 1 or 137 with `local` is refused unless `ALLOW_RAW_KEY_ON_MAINNET=true` — a speed bump, not a security control.
 
@@ -24,18 +24,17 @@ Both scripts print the signing source, address, chain id and balance before send
 
 ## Environment variables
 
-| Variable | Mode | Meaning |
-| --- | --- | --- |
-| `DEPLOYER_SIGNER` | both | `kms` or `local` (default `local`) |
-| `INFURA_API_KEY` | both | RPC access |
-| `PRIVATE_KEY` | local | Raw deployer key |
-| `ALLOW_RAW_KEY_ON_MAINNET` | local | `true` to override the mainnet refusal |
-| `AWS_KMS_KEY_ID` | kms | Key id, ARN, or `alias/...` |
-| `AWS_PROFILE` | kms | SSO profile to use |
-| `AWS_REGION` | kms | Only if the profile sets no region |
-| `FACTORY_ADMIN_ADDRESS` | token factory | Granted `DEFAULT_ADMIN_ROLE` + `PAUSER_ROLE`. Defaults to the deployer |
-| `TOKEN_DEPLOYER_ADDRESS` | token factory | Granted `DEPLOYER_ROLE`. Defaults to the deployer |
-| `DOCTOR_TIMEOUT_MS` | both | Per-check timeout for `npm run doctor` (default 15000) |
+| Variable                   | Mode          | Meaning                                                                |
+| -------------------------- | ------------- | ---------------------------------------------------------------------- |
+| `DEPLOYER_SIGNER`          | both          | `kms` or `local` (default `local`)                                     |
+| `INFURA_API_KEY`           | both          | RPC access                                                             |
+| `PRIVATE_KEY`              | local         | Raw deployer key                                                       |
+| `ALLOW_RAW_KEY_ON_MAINNET` | local         | `true` to override the mainnet refusal                                 |
+| `AWS_KMS_KEY_ID`           | kms           | Key id, ARN, or `alias/...`                                            |
+| `AWS_PROFILE`              | kms           | SSO profile to use                                                     |
+| `AWS_REGION`               | kms           | Only if the profile sets no region                                     |
+| `FACTORY_ADMIN_ADDRESS`    | token factory | Granted `DEFAULT_ADMIN_ROLE` + `PAUSER_ROLE`. Defaults to the deployer |
+| `TOKEN_DEPLOYER_ADDRESS`   | token factory | Granted `DEPLOYER_ROLE`. Defaults to the deployer                      |
 
 `deploy:smartWalletFactory` reads no address variables — the factory takes no constructor arguments and grants no roles.
 
@@ -63,7 +62,7 @@ The key is generated inside KMS and cannot be exported. This repo reads no AWS s
 **1. Configure the SSO profile** (once per machine; writes `~/.aws/config` and logs you in):
 
 ```bash
-aws configure sso --profile kumaapay-dev
+aws configure sso --profile blockchain-wallet
 ```
 
 It prompts for the account, the role, and a region. Give it the region the KMS key lives in — KMS keys are regional, and a wrong region fails with `NotFoundException` even when SSO and IAM are fine.
@@ -71,8 +70,8 @@ It prompts for the account, the role, and a region. Give it the region the KMS k
 **2. Log in** (again whenever the session expires, typically 8–12h):
 
 ```bash
-aws sso login --profile kumaapay-dev
-export AWS_PROFILE=kumaapay-dev
+aws sso login --profile blockchain-wallet
+export AWS_PROFILE=blockchain-wallet
 aws sts get-caller-identity   # verify
 ```
 
@@ -92,7 +91,7 @@ npm run kms:address -- polygon
 
 ```
 KMS key:     alias/smart-wallet-deployer
-AWS profile: kumaapay-dev
+AWS profile: blockchain-wallet
 Address:     0x1234...abcd
 ```
 
@@ -106,24 +105,6 @@ export TOKEN_DEPLOYER_ADDRESS=0x<address>
 npm run deploy:tokenFactory -- polygon
 npm run deploy:smartWalletFactory -- polygon
 ```
-
-## Preflight
-
-```bash
-npm run doctor -- polygon
-```
-
-Checks each dependency separately, so a failure names the endpoint responsible instead of an anonymous stack trace:
-
-```
-  ✓ Environment        mode=kms, all required variables set
-  ✓ Proxy env          no proxy variables set
-  ✓ RPC                https://polygon-mainnet.infura.io/v3/<key> — chainId 137, block 93042742 [1350ms]
-  ✓ KMS                alias/smart-wallet-deployer -> 0x1234…abcd (profile kumaapay-dev, region eu-west-1) [820ms]
-  ✓ Deployer balance   0x1234…abcd holds 2.5 ETH
-```
-
-Exits non-zero if anything fails, so it can gate a deploy in CI. The RPC API key is masked, so the output is safe to paste into a ticket. It covers the signer and the network, which both stacks share.
 
 ## What gets deployed
 
@@ -142,7 +123,7 @@ One contract, no proxy: `SmartWalletFactoryV1`, no constructor arguments. Not re
 
 Before sending it estimates gas, adds 10%, prices it at the node's `maxFeePerGas`, and aborts if the balance cannot cover the worst case. It requires EIP-1559 fee data and will not fall back to a legacy `gasPrice`.
 
-The wallets it creates are plain `SmartWalletV1` contracts — CREATE2 from a caller-supplied salt, `Ownable2Step` + `ReentrancyGuard`, not proxies and not upgradeable. `createWallet` calls `transferOwnership`, which under `Ownable2Step` only sets a *pending* owner, so the caller must follow up with `acceptOwnership()`. See [`contracts/SmartWalletV1/`](../contracts/SmartWalletV1/).
+The wallets it creates are plain `SmartWalletV1` contracts — CREATE2 from a caller-supplied salt, `Ownable2Step` + `ReentrancyGuard`, not proxies and not upgradeable. `createWallet` calls `transferOwnership`, which under `Ownable2Step` only sets a _pending_ owner, so the caller must follow up with `acceptOwnership()`. See [`contracts/SmartWalletV1/`](../contracts/SmartWalletV1/).
 
 Record all printed addresses.
 
@@ -166,7 +147,7 @@ npx hardhat verify \
 
 KMS failures are translated into messages naming the actual misconfiguration, with the SDK error preserved as `.cause`. A bare SDK error is one this repo has no specific guidance for.
 
-**`Token has expired` / `No AWS credentials found`** — the SSO session lapsed. `aws sso login --profile kumaapay-dev`, and check `AWS_PROFILE` is exported in *this* shell.
+**`Token has expired` / `No AWS credentials found`** — the SSO session lapsed. `aws sso login --profile blockchain-wallet`, and check `AWS_PROFILE` is exported in _this_ shell.
 
 **`Region is missing`** — no region resolved. Set `AWS_REGION`, or re-run step 1 with the region the key was created in.
 
@@ -186,21 +167,7 @@ aws kms create-key --key-spec ECC_SECG_P256K1 --key-usage SIGN_VERIFY
 
 **`does not recover to <address>`** — the signature did not recover to the key's own address. Fails closed, signs nothing. Check `AWS_KMS_KEY_ID`.
 
-**`ConnectTimeoutError` / `UND_ERR_CONNECT_TIMEOUT`** — never KMS. `undici` is Hardhat's HTTP client; the AWS SDK uses Node's `https` via `@smithy/node-http-handler`. A *connect* timeout means the TCP handshake never completed, so it is a network path, not auth. In order of likelihood:
-
-1. **A proxy or VPN.** `undici` ignores `HTTP_PROXY`/`HTTPS_PROXY`, so Hardhat bypasses the proxy even though `curl` and the AWS CLI honour it — the usual explanation for "everything else works but Hardhat times out". Connect directly, or route Node through the proxy explicitly (`undici.setGlobalDispatcher`, `global-agent`).
-2. A firewall blocking outbound 443 to the RPC host.
-3. A missing `INFURA_API_KEY`, giving a URL ending in `/undefined`.
-
-Isolate with `npm run doctor -- <network>`, then confirm reachability independently:
-
-```bash
-curl -s -X POST -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
-  "https://polygon-mainnet.infura.io/v3/$INFURA_API_KEY"
-```
-
-`curl` succeeding while the doctor's RPC check times out is cause 1.
+**`ConnectTimeoutError` / `UND_ERR_CONNECT_TIMEOUT`** — never KMS. `undici` is Hardhat's HTTP client; the AWS SDK uses Node's `https` via `@smithy/node-http-handler`. A _connect_ timeout means the TCP handshake never completed, so it is a network path, not auth. In order of likelihood:
 
 **`Refusing to deploy to chain 137 with a raw private key`** — intended. Use `DEPLOYER_SIGNER=kms`.
 

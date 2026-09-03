@@ -61,55 +61,6 @@ function maskUrl(url: string): string {
 	}
 }
 
-function checkProxy() {
-	const vars = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
-	const set = vars.filter(v => process.env[v]);
-
-	if (set.length === 0) {
-		record("Proxy env", true, "no proxy variables set");
-		return;
-	}
-
-	record(
-		"Proxy env",
-		false,
-		`${set.join(", ")} set — undici (Hardhat's HTTP client) IGNORES these, so RPC calls bypass the proxy and can connect-timeout ` +
-			"even when curl and the AWS CLI work. See docs/DEPLOYMENT.md."
-	);
-}
-
-async function checkRpc() {
-	const config = hre.network.config as HttpNetworkConfig;
-	const url = config.url;
-
-	if (!url) {
-		record("RPC", true, `network '${hre.network.name}' is in-process (no HTTP endpoint)`);
-		return;
-	}
-
-	// `${process.env.INFURA_API_KEY}` interpolates to the literal "undefined"
-	// when unset. A URL with no path at all (http://127.0.0.1:8545) is fine.
-	if (/\/(undefined|null)$/.test(safePathname(url))) {
-		record("RPC", false, `${maskUrl(url)} — the API key is missing. Check INFURA_API_KEY in .env`);
-		return;
-	}
-
-	const started = Date.now();
-
-	try {
-		const chainId = await withTimeout("RPC", () => ethers.provider.send("eth_chainId", []));
-		const blockNumber = await withTimeout("RPC", () => ethers.provider.send("eth_blockNumber", []));
-
-		record("RPC", true, `${maskUrl(url)} — chainId ${BigInt(chainId)}, block ${BigInt(blockNumber)}`, Date.now() - started);
-	} catch (error: any) {
-		const hint = /timeout|UND_ERR_CONNECT/i.test(error?.code ?? error?.message ?? "")
-			? " (TCP connect never completed: VPN, firewall, proxy, or DNS — not an auth problem)"
-			: "";
-
-		record("RPC", false, `${maskUrl(url)} — ${error.message}${hint}`, Date.now() - started);
-	}
-}
-
 async function checkKms() {
 	const mode = (process.env.DEPLOYER_SIGNER ?? "local").toLowerCase();
 
@@ -188,8 +139,6 @@ async function main() {
 	console.log(`\nPreflight — network '${hre.network.name}', timeout ${TIMEOUT_MS}ms\n`);
 
 	checkEnv();
-	checkProxy();
-	await checkRpc();
 	await checkKms();
 	await checkDeployerBalance();
 
