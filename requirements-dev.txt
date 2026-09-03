@@ -1,0 +1,8 @@
+# Static-analysis toolchain (see docs/SECURITY_TOOLING.md).
+#
+# Install with pip:
+#   pip install -r requirements-dev.txt
+#
+# Or with pipx, which has no -r flag, so pass the pin from this file:
+#   pipx install "$(grep -v '^#' requirements-dev.txt | tr -d '[:space:]')"
+slither-analyzer==0.11.3

@@ -1,0 +1,114 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "compiler-version": [
+      "error",
+      "^0.8.28"
+    ],
+    "avoid-call-value": "error",
+    "avoid-low-level-calls": "error",
+    "avoid-sha3": "error",
+    "avoid-suicide": "error",
+    "avoid-throw": "error",
+    "avoid-tx-origin": "error",
+    "check-send-result": "error",
+    "multiple-sends": "error",
+    "no-complex-fallback": "error",
+    "no-immutable-before-declaration": "error",
+    "no-unchecked-calls": "error",
+    "not-rely-on-block-hash": "error",
+    "not-rely-on-time": "error",
+    "reentrancy": "error",
+    "state-visibility": "error",
+    "func-visibility": [
+      "error",
+      {
+        "ignoreConstructors": true
+      }
+    ],
+    "no-inline-assembly": "warn",
+    "no-console": "error",
+    "no-unused-import": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "validateParameters": true
+      }
+    ],
+    "no-unused-private-funcs": "error",
+    "duplicated-imports": "error",
+    "no-global-import": "error",
+    "imports-on-top": "error",
+    "one-contract-per-file": "error",
+    "explicit-types": [
+      "error",
+      "explicit"
+    ],
+    "quotes": [
+      "error",
+      "double"
+    ],
+    "visibility-modifier-order": "error",
+    "const-name-snakecase": "error",
+    "contract-name-capwords": "error",
+    "event-name-capwords": "error",
+    "func-name-mixedcase": "error",
+    "use-forbidden-name": "error",
+    "private-vars-leading-underscore": [
+      "error",
+      {
+        "strict": false
+      }
+    ],
+    "var-name-mixedcase": "error",
+    "immutable-vars-naming": [
+      "error",
+      {
+        "immutablesAsConstants": false
+      }
+    ],
+    "gas-custom-errors": "error",
+    "gas-calldata-parameters": "warn",
+    "gas-increment-by-one": "warn",
+    "gas-indexed-events": "warn",
+    "gas-length-in-loops": "warn",
+    "gas-small-strings": "warn",
+    "gas-strict-inequalities": "warn",
+    "gas-struct-packing": "warn",
+    "use-natspec": [
+      "warn",
+      {
+        "title": {
+          "enabled": true,
+          "ignore": {}
+        },
+        "author": {
+          "enabled": false,
+          "ignore": {}
+        },
+        "notice": {
+          "enabled": true,
+          "ignore": {}
+        },
+        "param": {
+          "enabled": true,
+          "ignore": {}
+        },
+        "return": {
+          "enabled": true,
+          "ignore": {}
+        }
+      }
+    ],
+    "max-line-length": [
+      "warn",
+      120
+    ],
+    "no-empty-blocks": "off",
+    "interface-starts-with-i": "off",
+    "import-path-check": "off",
+    "function-max-lines": "off",
+    "code-complexity": "off",
+    "named-parameters-mapping": "off"
+  }
+}

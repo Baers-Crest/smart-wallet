@@ -16,12 +16,12 @@ contract CurrencyTokenV2Mock is CurrencyToken {
     }
 
     /// @dev keccak256(abi.encode(uint256(keccak256("storage.CurrencyTokenV2Mock")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant V2_STORAGE =
+    bytes32 private constant _V2_STORAGE =
         0x38f903c2d18bfb3612a3d850e223fe1378ec9dd00b8f9cf44f5495fa16050300;
 
     function _v2Storage() private pure returns (V2Storage storage $) {
         assembly {
-            $.slot := V2_STORAGE
+            $.slot := _V2_STORAGE
         }
     }
 

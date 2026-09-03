@@ -30,7 +30,6 @@ contract SmartWallet is
         require(_owner != address(0), "Invalid owner");
         trustedEntryPoint = _entryPoint;
         __Ownable_init(_owner);
-        __UUPSUpgradeable_init();
         _transferOwnership(_owner);
     }
 

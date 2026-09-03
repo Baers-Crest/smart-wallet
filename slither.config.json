@@ -1,0 +1,13 @@
+{
+  "include_paths": "contracts/TokenFactory/.+\\.sol",
+  "exclude_dependencies": true,
+  "detectors_to_exclude": "pragma,solc-version,naming-convention",
+  "exclude_informational": false,
+  "exclude_low": false,
+  "exclude_medium": false,
+  "exclude_high": false,
+  "exclude_optimization": false,
+  "fail_on": "pedantic",
+  "hardhat_ignore_compile": true,
+  "triage_database": "slither.db.json"
+}

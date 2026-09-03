@@ -3,6 +3,13 @@
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test --network hardhat",
+    "lint:sol": "npx solhint --max-warnings 0 \"contracts/TokenFactory/**/*.sol\"",
+    "lint:sol:fix": "npx solhint --fix --noPrompt \"contracts/TokenFactory/**/*.sol\"",
+    "lint": "npm run lint:sol",
+    "slither": "npm run compile:clean && slither .",
+    "slither:triage": "npm run compile:clean && slither . --triage-mode",
+    "slither:report": "npm run compile:clean && slither . --checklist --markdown-root . --fail-none > slither-report.md",
+    "security": "npm run lint:sol && npm run slither",
     "deploy:smartWalletFactory": "npx hardhat run scripts/deploySmartWalletFactory.ts --network",
     "deploy:tokenFactory": "npx hardhat run scripts/deployTokenFactory.ts --network",
     "verify:factory": "npx hardhat verify --contract contracts/SmartWalletV1/SmartWalletFactory.sol:SmartWalletFactoryV1 --network",
@@ -12,24 +19,25 @@
     "verify:wallet": "npx hardhat verify --contract contracts/SmartWalletProxy.sol:SmartWalletProxy --constructor-args scripts/args.js --network",
     "coverage": "COVERAGE=true npx hardhat coverage",
     "kms:address": "npx hardhat run scripts/kmsAddress.ts --network",
-    "doctor": "npx hardhat run scripts/doctor.ts --network"
+    "doctor": "npx hardhat run scripts/doctor.ts --network",
+    "compile:clean": "npx hardhat clean && npx hardhat compile"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@aws-sdk/client-kms": "^3.1125.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "@openzeppelin/hardhat-upgrades": "^3.9.1",
-    "@types/hdkey": "^2.0.3",
+    "@types/hdkey": "^2.1.0",
     "bip39": "^3.1.0",
-    "dotenv": "^16.4.5",
-    "hardhat": "^2.22.5",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.29.1",
     "hardhat-contract-sizer": "^2.10.1",
     "hdkey": "^2.1.0",
-    "@aws-sdk/client-kms": "^3.1125.0"
+    "solhint": "^6.2.4"
   },
   "dependencies": {
     "@account-abstraction/contracts": "^0.8.0",
-    "@chainlink/contracts": "^1.1.1",
-    "@openzeppelin/contracts": "^5.4.0",
-    "@openzeppelin/contracts-upgradeable": "^5.4.0",
-    "ethers": "^6.13.3"
+    "@openzeppelin/contracts": "^5.6.1",
+    "@openzeppelin/contracts-upgradeable": "^5.6.1",
+    "ethers": "^6.17.0"
   }
 }
