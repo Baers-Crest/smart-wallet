@@ -1,5 +1,5 @@
 {
-  "include_paths": "contracts/TokenFactory/\\w+\\.sol",
+  "include_paths": "contracts/TokenFactory/.+\\.sol",
   "exclude_dependencies": true,
   "detectors_to_exclude": "pragma,solc-version,naming-convention",
   "exclude_informational": false,
