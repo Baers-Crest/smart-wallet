@@ -1,21 +1,23 @@
 import hre, { ethers } from "hardhat";
 
-/**
- * Preflight for deployments: checks each external dependency separately so a
- * failure names the endpoint responsible.
- *
- * A bare `ConnectTimeoutError` from undici carries no application frames, and
- * undici is Hardhat's HTTP client — not the AWS SDK's — so a timeout there is
- * always the RPC or an explorer, never KMS.
- */
 const TIMEOUT_MS = Number(process.env.DOCTOR_TIMEOUT_MS ?? 15_000);
 
-type Check = { name: string; ok: boolean; detail: string; ms?: number };
+type Status = "ok" | "warn" | "fail";
+
+type Check = { name: string; status: Status; detail: string; ms?: number };
 
 const results: Check[] = [];
 
 function record(name: string, ok: boolean, detail: string, ms?: number) {
-	results.push({ name, ok, detail, ms });
+	results.push({ name, status: ok ? "ok" : "fail", detail, ms });
+}
+
+/**
+ * A problem that blocks one deploy script but not the other, or a setting that
+ * is only conventionally required. Reported, but does not fail the run.
+ */
+function warn(name: string, detail: string) {
+	results.push({ name, status: "warn", detail });
 }
 
 async function withTimeout<T>(label: string, run: () => Promise<T>): Promise<T> {
@@ -32,39 +34,14 @@ async function withTimeout<T>(label: string, run: () => Promise<T>): Promise<T> 
 	}
 }
 
-/** Path of an RPC URL, or "" if it does not parse — never throws. */
-function safePathname(url: string): string {
-	try {
-		return new URL(url).pathname;
-	} catch {
-		return "";
-	}
-}
-
-/** Hides the API key in an RPC URL so the output is safe to paste. */
-function maskUrl(url: string): string {
-	try {
-		const parsed = new URL(url);
-		const segments = parsed.pathname.split("/").filter(Boolean);
-
-		if (segments.length > 0) {
-			// Replace the key outright — a prefix is still a credential leak in a
-			// pasted bug report. Built by hand so the placeholder is not
-			// percent-encoded by URL.toString().
-			segments[segments.length - 1] = "<key>";
-		}
-
-		return `${parsed.protocol}//${parsed.host}/${segments.join("/")}`;
-	} catch {
-		return "(unparseable URL)";
-	}
-}
-
 async function checkKms() {
 	const mode = (process.env.DEPLOYER_SIGNER ?? "local").toLowerCase();
 
 	if (mode !== "kms") {
-		record("KMS", true, `skipped (DEPLOYER_SIGNER=${mode})`);
+		if (mode === "local") {
+			record("KMS", true, "skipped (DEPLOYER_SIGNER=local)");
+		}
+
 		return;
 	}
 
@@ -90,7 +67,7 @@ async function checkKms() {
 }
 
 async function checkDeployerBalance() {
-	const blocker = results.find(r => (r.name === "RPC" || r.name === "KMS") && !r.ok);
+	const blocker = results.find(r => ["Environment", "KMS"].includes(r.name) && r.status === "fail");
 
 	if (blocker) {
 		record("Deployer balance", false, `skipped — ${blocker.name} check failed`);
@@ -116,45 +93,88 @@ async function checkDeployerBalance() {
 function checkEnv() {
 	const mode = (process.env.DEPLOYER_SIGNER ?? "local").toLowerCase();
 
+	if (mode !== "kms" && mode !== "local") {
+		record("Environment", false, `unknown DEPLOYER_SIGNER '${mode}' — expected 'kms' or 'local'`);
+		return;
+	}
+
 	// localhost and hardhat take their accounts from the node, not PRIVATE_KEY.
 	const needsPrivateKey = !["localhost", "hardhat"].includes(hre.network.name);
 
 	const required: [string, unknown][] =
-		mode === "kms"
-			? [
-					["AWS_KMS_KEY_ID", process.env.AWS_KMS_KEY_ID],
-					["AWS_PROFILE", process.env.AWS_PROFILE]
-			  ]
-			: needsPrivateKey
-			? [["PRIVATE_KEY", process.env.PRIVATE_KEY]]
-			: [];
+		mode === "kms" ? [["AWS_KMS_KEY_ID", process.env.AWS_KMS_KEY_ID]] : needsPrivateKey ? [["PRIVATE_KEY", process.env.PRIVATE_KEY]] : [];
 
 	const missing = required.filter(([, value]) => !value).map(([name]) => name);
 
 	record("Environment", missing.length === 0, missing.length === 0 ? `mode=${mode}, all required variables set` : `missing: ${missing.join(", ")}`);
+
+	if (mode === "kms" && !process.env.AWS_PROFILE) {
+		warn("AWS_PROFILE", "not set — falling back to the rest of the AWS provider chain");
+	}
 }
+
+function checkTokenFactoryEnv() {
+	const problems = (["FACTORY_ADMIN_ADDRESS", "TOKEN_DEPLOYER_ADDRESS"] as const)
+		.map(name => {
+			const value = process.env[name];
+
+			if (!value) {
+				return `${name} is not set`;
+			}
+
+			if (!ethers.isAddress(value)) {
+				return `${name} is not an address (${value})`;
+			}
+
+			if (value === ethers.ZeroAddress) {
+				return `${name} is the zero address — initialize would revert`;
+			}
+
+			return undefined;
+		})
+		.filter((problem): problem is string => problem !== undefined);
+
+	if (problems.length > 0) {
+		warn("Token factory roles", `${problems.join("; ")} — needed by deploy:tokenFactory only`);
+		return;
+	}
+
+	record("Token factory roles", true, `admin ${process.env.FACTORY_ADMIN_ADDRESS}, token deployer ${process.env.TOKEN_DEPLOYER_ADDRESS}`);
+}
+
+const SYMBOLS: Record<Status, string> = { ok: "✓", warn: "!", fail: "✗" };
 
 async function main() {
 	console.log(`\nPreflight — network '${hre.network.name}', timeout ${TIMEOUT_MS}ms\n`);
 
 	checkEnv();
+	checkTokenFactoryEnv();
 	await checkKms();
 	await checkDeployerBalance();
 
-	for (const { name, ok, detail, ms } of results) {
+	const width = Math.max(...results.map(r => r.name.length));
+
+	for (const { name, status, detail, ms } of results) {
 		const timing = ms === undefined ? "" : ` [${ms}ms]`;
-		console.log(`  ${ok ? "✓" : "✗"} ${name.padEnd(18)} ${detail}${timing}`);
+		console.log(`  ${SYMBOLS[status]} ${name.padEnd(width)}  ${detail}${timing}`);
 	}
 
-	const failed = results.filter(r => !r.ok);
+	const failed = results.filter(r => r.status === "fail");
+	const warned = results.filter(r => r.status === "warn");
 	console.log();
 
 	if (failed.length > 0) {
 		console.log(`${failed.length} check(s) failed: ${failed.map(f => f.name).join(", ")}\n`);
 		process.exitCode = 1;
-	} else {
-		console.log("All checks passed — safe to deploy.\n");
+		return;
 	}
+
+	if (warned.length > 0) {
+		console.log(`All checks passed with ${warned.length} warning(s): ${warned.map(w => w.name).join(", ")}\n`);
+		return;
+	}
+
+	console.log("All checks passed — safe to deploy.\n");
 }
 
 main().catch(error => {

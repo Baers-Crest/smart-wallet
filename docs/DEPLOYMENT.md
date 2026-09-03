@@ -5,6 +5,13 @@
 | Token factory | `CurrencyToken` implementation + `TokenFactory` behind a transparent proxy | [`scripts/deployTokenFactory.ts`](../scripts/deployTokenFactory.ts) | `deploy:tokenFactory` |
 | Wallet factory | `SmartWalletFactoryV1`, unproxied | [`scripts/deploySmartWalletFactory.ts`](../scripts/deploySmartWalletFactory.ts) | `deploy:smartWalletFactory` |
 
+Two read-only helpers support them — neither signs or sends anything:
+
+| Purpose | Script | npm script |
+| --- | --- | --- |
+| Preflight the deploy configuration | [`scripts/doctor.ts`](../scripts/doctor.ts) | `doctor` |
+| Print the address behind `AWS_KMS_KEY_ID` | [`scripts/kmsAddress.ts`](../scripts/kmsAddress.ts) | `kms:address` |
+
 Every script takes the network as an argument: `npm run <script> -- <network>` (`localhost`, `sepolia`, `amoy`, `mainnet`, `polygon`).
 
 The wallet script deploys `SmartWalletFactoryV1` from [`contracts/SmartWalletV1/`](../contracts/SmartWalletV1/), **not** the older `SmartWalletFactory` in [`contracts/`](../contracts/). Nothing in `scripts/` deploys that one.
@@ -35,10 +42,50 @@ Both scripts print the signing source, address, chain id and balance before send
 | `AWS_REGION`               | kms           | Only if the profile sets no region            |
 | `FACTORY_ADMIN_ADDRESS`    | token factory | Granted `DEFAULT_ADMIN_ROLE` + `PAUSER_ROLE`. |
 | `TOKEN_DEPLOYER_ADDRESS`   | token factory | Granted `DEPLOYER_ROLE`.                      |
+| `ETHERSCAN_API_KEY`        | verifying     | Used by every `verify:*` script               |
+| `DOCTOR_TIMEOUT_MS`        | preflight     | Per-check timeout, default `15000`            |
 
 `deploy:smartWalletFactory` reads no address variables — the factory takes no constructor arguments and grants no roles.
 
-Both address variables defaulting to the deployer means a KMS deploy that sets neither hands `DEFAULT_ADMIN_ROLE` **and** `DEPLOYER_ROLE` to the KMS key. That is usually right for the admin and usually wrong for the deployer — point `TOKEN_DEPLOYER_ADDRESS` at the hot key that will actually call `deployToken`.
+Neither address variable defaults to the deployer: `deploy:tokenFactory` throws unless both are set to valid addresses, so the roles are always a deliberate choice rather than a side effect of who signed. `FACTORY_ADMIN_ADDRESS` is usually the KMS key itself; point `TOKEN_DEPLOYER_ADDRESS` at the hot key that will actually call `deployToken`. `npm run doctor` reports both before a deploy gets that far.
+
+## Preflight — `npm run doctor`
+
+```bash
+npm run doctor -- amoy
+```
+
+Checks each dependency a deploy needs separately, so a failure names the thing responsible instead of surfacing mid-deploy. It signs nothing and sends nothing.
+
+| Check | Verifies | On failure |
+| --- | --- | --- |
+| Environment | `DEPLOYER_SIGNER` is `kms` or `local`, and that mode's required variable is set — `AWS_KMS_KEY_ID` for `kms`, `PRIVATE_KEY` for `local` | Fails. `PRIVATE_KEY` is not required on `localhost`/`hardhat`, where accounts come from the node |
+| `AWS_PROFILE` | Only reported when `DEPLOYER_SIGNER=kms` and it is unset | Warns — the rest of the AWS provider chain may still resolve credentials, and the KMS check settles it |
+| Token factory roles | `FACTORY_ADMIN_ADDRESS` and `TOKEN_DEPLOYER_ADDRESS` are set, valid addresses, and not the zero address | Warns — needed by `deploy:tokenFactory` only, and `deploy:smartWalletFactory` reads neither |
+| KMS | `kms:GetPublicKey` succeeds and an address derives from the key | Fails. Skipped in `local` mode |
+| Deployer balance | The signer resolves through `getDeployer` and holds a non-zero balance | Fails. Skipped if Environment or KMS already failed |
+
+```
+Preflight — network 'amoy', timeout 15000ms
+
+  ✓ Environment          mode=local, all required variables set
+  ! Token factory roles  FACTORY_ADMIN_ADDRESS is not set — needed by deploy:tokenFactory only
+  ✓ KMS                  skipped (DEPLOYER_SIGNER=local)
+  ✓ Deployer balance     0x1234...abcd holds 102.335807423868975 ETH
+
+All checks passed with 1 warning(s): Token factory roles
+```
+
+`✓` passed, `!` warning, `✗` failure. It exits `1` if any check failed and `0` otherwise, so it can gate a deploy in CI; warnings never affect the exit code.
+
+The two calls that leave the machine — `kms:GetPublicKey` and resolving the signer — are each bounded by `DOCTOR_TIMEOUT_MS` (default 15s), and the KMS line reports its elapsed time in milliseconds. A timeout is reported as a failure naming the call that hung, so raise the value on a slow link rather than reading it as a broken key.
+
+Two things it does not prove:
+
+- **That the balance is sufficient**, only that it is non-zero. `deploy:smartWalletFactory` does the real arithmetic against estimated gas immediately before sending.
+- **That the deploy will succeed.** It is a configuration check, not a dry run.
+
+It does, however, catch the mainnet raw-key refusal: the balance check resolves the signer through `getDeployer`, so a chain 1/137 deploy in `local` mode is rejected during preflight rather than at the moment of deploy.
 
 ## Mode 1 — local private key
 
@@ -51,6 +98,7 @@ TOKEN_DEPLOYER_ADDRESS=0x<address>
 ```
 
 ```bash
+npm run doctor -- amoy          # preflight; exits 1 if anything is missing
 npm run deploy:tokenFactory -- amoy
 npm run deploy:smartWalletFactory -- amoy
 ```
@@ -75,7 +123,7 @@ export AWS_PROFILE=blockchain-wallet
 aws sts get-caller-identity   # verify
 ```
 
-`AWS_PROFILE` must be exported in every shell you deploy from; it is never read from `.env`.
+`AWS_PROFILE` must be exported in every shell you deploy from; it is never read from `.env`. No code here reads it directly, so any other source in the AWS provider chain (an instance, container or OIDC role in CI) serves just as well — which is why `npm run doctor` treats a missing `AWS_PROFILE` as a warning and lets the KMS check decide whether the credentials it did resolve reach the key.
 
 **3. Point at the key.** It must be `KeySpec=ECC_SECG_P256K1`, `KeyUsage=SIGN_VERIFY`:
 
@@ -95,13 +143,14 @@ AWS profile: blockchain-wallet
 Address:     0x1234...abcd
 ```
 
-**5. Deploy:**
+**5. Preflight, then deploy:**
 
 ```bash
 export DEPLOYER_SIGNER=kms
 export FACTORY_ADMIN_ADDRESS=0x<address>
 export TOKEN_DEPLOYER_ADDRESS=0x<address>
 
+npm run doctor -- polygon
 npm run deploy:tokenFactory -- polygon
 npm run deploy:smartWalletFactory -- polygon
 ```
@@ -115,7 +164,7 @@ npm run deploy:smartWalletFactory -- polygon
 
 Each token the factory later deploys is its own ERC-1967 (UUPS) proxy, upgradeable only by that token's own owner. See [`contracts/TokenFactory/`](../contracts/TokenFactory/).
 
-`.openzeppelin/<network>.json` is written by the upgrades plugin and **must be committed** — without it, future upgrades cannot be validated for storage compatibility. `deployImplementation` is idempotent against that manifest, so re-running the script reuses an unchanged implementation rather than orphaning the previous one.
+`.openzeppelin/<network>.json` is written by the upgrades plugin and **must be committed** — without it, future upgrades cannot be validated for storage compatibility. Only chains the plugin recognises get a file named after the network; Amoy is not one, so it lands as `.openzeppelin/unknown-80002.json`, keyed by chain id. `deployImplementation` is idempotent against that manifest, so re-running the script reuses an unchanged implementation rather than orphaning the previous one.
 
 **`deploy:smartWalletFactory`**
 
@@ -145,6 +194,8 @@ npx hardhat verify \
 
 ## Troubleshooting
 
+Start with `npm run doctor -- <network>`: isolating which dependency is at fault is most of the diagnosis. Everything below is what the resulting failure means.
+
 KMS failures are translated into messages naming the actual misconfiguration, with the SDK error preserved as `.cause`. A bare SDK error is one this repo has no specific guidance for.
 
 **`Token has expired` / `No AWS credentials found`** — the SSO session lapsed. `aws sso login --profile blockchain-wallet`, and check `AWS_PROFILE` is exported in _this_ shell.
@@ -166,6 +217,8 @@ aws kms create-key --key-spec ECC_SECG_P256K1 --key-usage SIGN_VERIFY
 ```
 
 **`does not recover to <address>`** — the signature did not recover to the key's own address. Fails closed, signs nothing. Check `AWS_KMS_KEY_ID`.
+
+**`unknown DEPLOYER_SIGNER '<value>' — expected 'kms' or 'local'`** — from `doctor`, and from `getDeployer` at deploy time. There is no fallback, so a typo like `kmss` fails rather than quietly signing with the local key.
 
 **`Refusing to deploy to chain 137 with a raw private key`** — intended. Use `DEPLOYER_SIGNER=kms`.
 
