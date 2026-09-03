@@ -4,12 +4,16 @@ import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
 import * as dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const config: HardhatUserConfig = {
 	solidity: {
 		version: "0.8.28",
 		settings: {
+			// OpenZeppelin Contracts 5.5+ emit the `mcopy` opcode, so the target
+			// EVM must be Cancun or newer. Pinned explicitly rather than relying
+			// on the solc default so bytecode stays reproducible across solc bumps.
+			evmVersion: "cancun",
 			optimizer: {
 				enabled: true,
 				runs: 200

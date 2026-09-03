@@ -141,7 +141,6 @@ contract CurrencyToken is
         __ERC20Pausable_init();
         __Ownable_init(_owner);
         __Ownable2Step_init();
-        __UUPSUpgradeable_init();
 
         _currencyTokenStorage().decimals = _tokenDecimals;
 

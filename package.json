@@ -15,21 +15,20 @@
     "doctor": "npx hardhat run scripts/doctor.ts --network"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@aws-sdk/client-kms": "^3.1125.0",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "@openzeppelin/hardhat-upgrades": "^3.9.1",
-    "@types/hdkey": "^2.0.3",
+    "@types/hdkey": "^2.1.0",
     "bip39": "^3.1.0",
-    "dotenv": "^16.4.5",
-    "hardhat": "^2.22.5",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.29.1",
     "hardhat-contract-sizer": "^2.10.1",
-    "hdkey": "^2.1.0",
-    "@aws-sdk/client-kms": "^3.1125.0"
+    "hdkey": "^2.1.0"
   },
   "dependencies": {
     "@account-abstraction/contracts": "^0.8.0",
-    "@chainlink/contracts": "^1.1.1",
-    "@openzeppelin/contracts": "^5.4.0",
-    "@openzeppelin/contracts-upgradeable": "^5.4.0",
-    "ethers": "^6.13.3"
+    "@openzeppelin/contracts": "^5.6.1",
+    "@openzeppelin/contracts-upgradeable": "^5.6.1",
+    "ethers": "^6.17.0"
   }
 }
