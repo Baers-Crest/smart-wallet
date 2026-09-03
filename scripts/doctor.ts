@@ -20,6 +20,17 @@ function warn(name: string, detail: string) {
 	results.push({ name, status: "warn", detail });
 }
 
+/**
+ * First line of whatever was thrown. `error.message` cannot be assumed: a
+ * rejected non-Error (an AWS SDK or provider rejecting with a plain object or a
+ * string) would otherwise crash the preflight inside its own catch block.
+ */
+function firstLine(error: unknown): string {
+	const message = typeof (error as any)?.message === "string" ? (error as any).message : String(error);
+
+	return message.split("\n")[0];
+}
+
 async function withTimeout<T>(label: string, run: () => Promise<T>): Promise<T> {
 	let timer: NodeJS.Timeout;
 
@@ -61,8 +72,8 @@ async function checkKms() {
 		const address = await withTimeout("KMS", () => new KmsSigner(keyId).getAddress());
 
 		record("KMS", true, `${keyId} -> ${address} (profile ${profile}, region ${region ?? "from profile"})`, Date.now() - started);
-	} catch (error: any) {
-		record("KMS", false, `${keyId} (profile ${profile}) — ${error.message.split("\n")[0]}`, Date.now() - started);
+	} catch (error: unknown) {
+		record("KMS", false, `${keyId} (profile ${profile}) — ${firstLine(error)}`, Date.now() - started);
 	}
 }
 
@@ -76,17 +87,25 @@ async function checkDeployerBalance() {
 
 	try {
 		const { getDeployer } = await import("./signers/getDeployer");
-		const deployer = await withTimeout("Deployer", () => getDeployer({ quiet: true }));
-		const address = await deployer.getAddress();
-		const balance = await ethers.provider.getBalance(address);
+
+		// Every leg has to sit inside the timeout: resolving the signer only talks
+		// to the node, while `getAddress` is the kms:GetPublicKey call and
+		// `getBalance` an eth_getBalance. Bounding just the first would let a node
+		// that answers eth_chainId and then stalls hang the preflight for ever.
+		const { address, balance } = await withTimeout("Deployer", async () => {
+			const deployer = await getDeployer({ quiet: true });
+			const resolved = await deployer.getAddress();
+
+			return { address: resolved, balance: await ethers.provider.getBalance(resolved) };
+		});
 
 		record(
 			"Deployer balance",
 			balance > 0n,
 			`${address} holds ${ethers.formatEther(balance)} ETH` + (balance > 0n ? "" : " — fund this address before deploying")
 		);
-	} catch (error: any) {
-		record("Deployer balance", false, error.message.split("\n")[0]);
+	} catch (error: unknown) {
+		record("Deployer balance", false, firstLine(error));
 	}
 }
 

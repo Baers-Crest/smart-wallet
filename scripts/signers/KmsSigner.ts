@@ -40,14 +40,22 @@ export class KmsSigner extends AbstractSigner {
 	}
 
 	connect(provider: Provider | null): KmsSigner {
-		return new KmsSigner(this.keyId, provider, this.client);
+		const signer = new KmsSigner(this.keyId, provider, this.client);
+
+		// The address is a property of the key, not of the provider — carrying it
+		// over saves a kms:GetPublicKey call on every reconnect.
+		signer.addressCache = this.addressCache;
+
+		return signer;
 	}
 
 	/**
 	 * Derives the Ethereum address from the KMS public key.
 	 *
-	 * KMS returns SPKI DER (RFC 5280). For secp256k1 the final 65 bytes are the
-	 * uncompressed point (0x04 ‖ X ‖ Y), which is what `computeAddress` wants.
+	 * KMS returns SPKI DER (RFC 5280). The prefix is matched in full rather than
+	 * just locating the trailing point: an ECC_NIST_P256 key produces the same
+	 * shape (a 65-byte uncompressed point at the end) and would otherwise yield a
+	 * plausible-looking address that nothing can ever sign for.
 	 */
 	async getAddress(): Promise<string> {
 		if (this.addressCache) {
@@ -61,13 +69,13 @@ export class KmsSigner extends AbstractSigner {
 		}
 
 		const der = Buffer.from(PublicKey);
-		const marker = der.lastIndexOf(0x04, der.length - 65);
+		const prefix = SECP256K1_SPKI_PREFIX;
 
-		if (marker < 0 || der.length - marker !== 65) {
+		if (der.length !== prefix.length + 65 || !der.subarray(0, prefix.length).equals(prefix)) {
 			throw new Error(`KMS key ${this.keyId} is not an uncompressed secp256k1 point — check KeySpec is ECC_SECG_P256K1`);
 		}
 
-		this.addressCache = computeAddress(hexlify(der.subarray(marker)));
+		this.addressCache = computeAddress(hexlify(der.subarray(prefix.length)));
 
 		return this.addressCache;
 	}
@@ -182,6 +190,13 @@ export class KmsSigner extends AbstractSigner {
 
 /** secp256k1 group order. */
 const SECP256K1_N = BigInt("0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+
+/**
+ * SPKI (RFC 5480) header KMS emits for an ECC_SECG_P256K1 key:
+ * SEQUENCE { SEQUENCE { id-ecPublicKey, secp256k1 }, BIT STRING (0 unused bits) }.
+ * The 65-byte uncompressed point follows it, for 88 bytes in total.
+ */
+const SECP256K1_SPKI_PREFIX = Buffer.from("3056301006072a8648ce3d020106052b8104000a034200", "hex");
 
 /** EIP-2: only the lower half of the order is a canonical signature. */
 export function normalizeS(s: bigint): bigint {

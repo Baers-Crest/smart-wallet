@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "crypto";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { GetPublicKeyCommand, SignCommand, KMSClient } from "@aws-sdk/client-kms";
@@ -126,6 +127,23 @@ describe("KmsSigner", function () {
 			};
 
 			await expect(makeSigner(badFake as unknown as FakeKms).getAddress()).to.be.rejectedWith("ECC_SECG_P256K1");
+		});
+
+		it("rejects an ECC_NIST_P256 key rather than deriving a dead address", async function () {
+			// P-256 SPKI has the same shape — a trailing 65-byte uncompressed point
+			// — so locating that point is not enough to tell the curves apart. The
+			// address would look fine and `kms:Sign` could never produce a
+			// signature recovering to it, after it had been funded.
+			const { publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+			const spki = publicKey.export({ type: "spki", format: "der" }) as Buffer;
+
+			const p256Fake = {
+				async send() {
+					return { PublicKey: new Uint8Array(spki) };
+				}
+			};
+
+			await expect(makeSigner(p256Fake as unknown as FakeKms).getAddress()).to.be.rejectedWith("ECC_SECG_P256K1");
 		});
 	});
 

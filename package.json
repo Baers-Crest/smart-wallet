@@ -3,12 +3,9 @@
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test --network hardhat",
-    "deploy:logic": "npx hardhat run scripts/deployLogic.js --network",
-    "verify:logic": "npx hardhat verify --contract contracts/SmartWallet.sol:SmartWallet --network",
-    "deploy:factory": "npx hardhat run scripts/deployFactory.js --network",
     "deploy:smartWalletFactory": "npx hardhat run scripts/deploySmartWalletFactory.ts --network",
     "deploy:tokenFactory": "npx hardhat run scripts/deployTokenFactory.ts --network",
-    "verify:factory": "npx hardhat verify --contract contracts/SmartWalletFactory.sol:SmartWalletFactory --network",
+    "verify:factory": "npx hardhat verify --contract contracts/SmartWalletV1/SmartWalletFactory.sol:SmartWalletFactoryV1 --network",
     "verify:tokenFactory": "npx hardhat verify --contract contracts/TokenFactory/TokenFactory.sol:TokenFactory --network",
     "predict:wallet": "npx hardhat run scripts/predictWallet.js --network",
     "create:wallet": "npx hardhat run scripts/createWallet.js --network",

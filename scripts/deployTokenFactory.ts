@@ -2,6 +2,29 @@ import { ethers, upgrades } from "hardhat";
 import { getDeployer } from "./signers/getDeployer";
 
 /**
+ * Reads a role address from the environment, failing before anything is
+ * deployed. The zero address is rejected here rather than left to the chain:
+ * `TokenFactory.initialize` reverts with `ZeroAddress`, but only after the
+ * `CurrencyToken` implementation has already been paid for and recorded in the
+ * upgrades manifest.
+ */
+function requireAddress(name: "FACTORY_ADMIN_ADDRESS" | "TOKEN_DEPLOYER_ADDRESS"): string {
+	const value = process.env[name];
+
+	if (!value) {
+		throw new Error(`${name} is not set`);
+	}
+	if (!ethers.isAddress(value)) {
+		throw new Error(`${name} is not a valid address: ${value}`);
+	}
+	if (value === ethers.ZeroAddress) {
+		throw new Error(`${name} is the zero address — TokenFactory.initialize would revert`);
+	}
+
+	return value;
+}
+
+/**
  * Deploys the TokenFactory stack:
  *   1. the shared CurrencyToken implementation that new token proxies point at;
  *   2. the TokenFactory itself, behind a transparent proxy.
@@ -13,21 +36,11 @@ import { getDeployer } from "./signers/getDeployer";
  * docs/DEPLOYMENT.md.
  */
 async function main() {
+	const tokenDeployer = requireAddress("TOKEN_DEPLOYER_ADDRESS");
+	const admin = requireAddress("FACTORY_ADMIN_ADDRESS");
+
 	const deployer = await getDeployer();
 	const deployerAddress = await deployer.getAddress();
-
-	const tokenDeployer = process.env.TOKEN_DEPLOYER_ADDRESS;
-	if (!tokenDeployer) {
-		throw new Error("TOKEN_DEPLOYER_ADDRESS is not set");
-	}
-	if (!ethers.isAddress(tokenDeployer)) {
-		throw new Error(`TOKEN_DEPLOYER_ADDRESS is not a valid address: ${tokenDeployer}`);
-	}
-
-	const admin = process.env.FACTORY_ADMIN_ADDRESS;
-	if (!ethers.isAddress(admin)) {
-		throw new Error(`FACTORY_ADMIN_ADDRESS is not a valid address: ${admin}`);
-	}
 
 	const CurrencyToken = await ethers.getContractFactory("CurrencyToken", deployer);
 	const currencyTokenImpl = await upgrades.deployImplementation(CurrencyToken, { kind: "uups" });

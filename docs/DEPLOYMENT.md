@@ -47,7 +47,7 @@ Both scripts print the signing source, address, chain id and balance before send
 
 `deploy:smartWalletFactory` reads no address variables — the factory takes no constructor arguments and grants no roles.
 
-Neither address variable defaults to the deployer: `deploy:tokenFactory` throws unless both are set to valid addresses, so the roles are always a deliberate choice rather than a side effect of who signed. `FACTORY_ADMIN_ADDRESS` is usually the KMS key itself; point `TOKEN_DEPLOYER_ADDRESS` at the hot key that will actually call `deployToken`. `npm run doctor` reports both before a deploy gets that far.
+Neither address variable defaults to the deployer: `deploy:tokenFactory` throws before deploying anything unless both are set to valid, non-zero addresses, so the roles are always a deliberate choice rather than a side effect of who signed. `FACTORY_ADMIN_ADDRESS` is usually the KMS key itself; point `TOKEN_DEPLOYER_ADDRESS` at the hot key that will actually call `deployToken`. `npm run doctor` reports both before a deploy gets that far.
 
 ## Preflight — `npm run doctor`
 
@@ -78,7 +78,7 @@ All checks passed with 1 warning(s): Token factory roles
 
 `✓` passed, `!` warning, `✗` failure. It exits `1` if any check failed and `0` otherwise, so it can gate a deploy in CI; warnings never affect the exit code.
 
-The two calls that leave the machine — `kms:GetPublicKey` and resolving the signer — are each bounded by `DOCTOR_TIMEOUT_MS` (default 15s), and the KMS line reports its elapsed time in milliseconds. A timeout is reported as a failure naming the call that hung, so raise the value on a slow link rather than reading it as a broken key.
+Both network-bound checks are capped by `DOCTOR_TIMEOUT_MS` (default 15s): the KMS check bounds its `kms:GetPublicKey` call and reports the elapsed milliseconds, and the balance check bounds signer resolution, `kms:GetPublicKey` and `eth_getBalance` together, so a node that answers and then stalls cannot hang the preflight. A timeout is recorded as a failure naming the call that hung — raise the value on a slow link rather than reading it as a broken key.
 
 Two things it does not prove:
 
